@@ -2,6 +2,9 @@
 
 This document provides essential context, architectural rules, and layout constraints for AI agents cooperating on `snapshotter`. Read this before proposing or making changes.
 
+## Repository Standards & Issue Workflow
+For documentation layout, file-based issue tracking, and issue templates, refer to `docs/standards.md`.
+
 ## Project Purpose
 `snapshotter` is a local-first, deterministic file snapshotting engine designed to run entirely in user-space with zero external dependencies (standard-library Go only, Go 1.23+). 
 

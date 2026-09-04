@@ -1,11 +1,31 @@
-# Issue 03: Rich CLI Commands and Robust Logging
+---
+id: "03"
+title: "Interactive TUI File History Viewer"
+module: "snapshotter"
+status: "proposed"
+branch: ""
+created: "2026-09-04T12:00:00Z"
+updated: "2026-09-04T13:00:00Z"
+blocked_by: ["01", "02"]
+---
 
-## Objective
-Extend `snapshotter.go` with explicit subcommand parsing (e.g., `snapshotter status`, `snapshotter commit "<msg>"`, and `snapshotter log`) to allow users to inspect changes before writing, supply custom commit messages, and view past snapshot ledger entries.
+# Issue 03: Interactive TUI File History Viewer
 
-## Tasks
-- [ ] Add subcommands using standard library `flag`:
-  - `status`: Show tracked, untracked, modified, deleted, and moved files compared to the last projection *without* writing a new snapshot.
-  - `commit "<message>"`: Create a new snapshot event with a custom user message (defaulting to "Snapshot").
-  - `log`: Parse and print the append-only ledger `events.jsonl` in a clean, human-readable timeline.
-- [ ] Ensure any error handling is output cleanly to `stderr` and exits with appropriate non-zero status codes.
+## Description
+When a user targets a file with `snapshotter <filename>`, launch an interactive Terminal User Interface (TUI) displaying that file's complete chronological history.
+
+## TUI Layout & Interactions
+- **Ordering**: Timestamps must be shown in descending order (newest first).
+- **Labels**:
+  - The current state must be marked with `(current)`.
+  - Deleted entries must be marked with `(deleted)`.
+  - Moved entries must be marked with `(moved)`.
+- **Navigation**:
+  - Pressing `Enter` on a `(moved)` entry should automatically navigate the TUI to the history of the new destination path (as if the user had executed `snapshotter <new_filename>`).
+
+## Acceptance Criteria
+- [ ] Parse cli arguments to detect the targeted filename.
+- [ ] Launch a lightweight, responsive TUI in the terminal.
+- [ ] Display historical entries ordered newest-first with accurate `(current)`, `(deleted)`, and `(moved)` annotations.
+- [ ] Wire up `Enter` on a `(moved)` entry to transition the view to the history of the new file location.
+- [ ] Provide clean error handling if the specified file does not exist in both active workspace and ledger.
