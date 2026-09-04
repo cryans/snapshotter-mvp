@@ -46,11 +46,10 @@ All tool metadata and history live inside a directory named `.snapshots/` at the
 ## Directory Exclusions
 To avoid infinite loops, self-snapshots, or committing massive localized caches, the walker enforces a small hard-coded default plus standard `.gitignore` semantics:
 
-1. **Hard-coded (always excluded, non-overridable)**: the tool's own state dir `.snapshots/`. The walker never snapshots its own ledger, regardless of `.gitignore`.
-2. **Everything else is `.gitignore`-driven** (`internal/store/walker.go` via `github.com/sabhiram/go-gitignore`, root + nested files, git-style). Blanket auto-ignoring of every dot-entry or binary is **not** done. To exclude the sandbox caches, spec/issue tracking, VCS metadata, or compiled binaries during real runs, users list them in a `.gitignore`:
+1. **Hard-coded (always excluded, non-overridable)**: the tool's own state dir `.snapshots/` and VCS metadata `.git/`. The walker never snapshots its own ledger or a repository's plumbing, regardless of `.gitignore`. (`.git` is excluded because git itself never consults `.gitignore` for its internal directories — not because a pattern matches it.)
+2. **Everything else is `.gitignore`-driven** (`internal/store/walker.go` via `github.com/sabhiram/go-gitignore`, root + nested files, git-style). Blanket auto-ignoring of every dot-entry or binary is **not** done. To exclude the sandbox caches, spec/issue tracking, or compiled binaries during real runs, users list them in a `.gitignore`:
    - Local workspace cache: `.go-cache/`, `.go-mod-cache/`
    - Spec and issue tracking: `.scratch/`
-   - VCS directories: `.git/`
    - Compiled executables, e.g. `snapshotter_bin`
 
 ---

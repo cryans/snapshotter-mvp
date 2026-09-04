@@ -50,6 +50,9 @@ func (w *walker) collect() ([]trackedFile, error) {
 // to the scan root ("" for the root itself). `frames` holds the active ignore
 // rules for this directory's *contents* (including this directory's own
 // `.gitignore`, if any). Trackable files found are appended to `out`.
+//
+// Entries named `.snapshots` (the tool's own state) and `.git` (VCS metadata)
+// are always skipped, at any depth, and never subject to .gitignore rules.
 func (w *walker) walkDir(absDir, relDir string, frames []ignoreFrame, out *[]trackedFile) error {
 	// Load this directory's own .gitignore and scope it to this directory, so its
 	// rules govern everything directly inside it (and its descendants).
@@ -67,9 +70,11 @@ func (w *walker) walkDir(absDir, relDir string, frames []ignoreFrame, out *[]tra
 		name := entry.Name()
 		isDir := entry.IsDir()
 
-		// Hard-coded exclusion: the tool's internal state directory is never
-		// snapshotted, regardless of any .gitignore rules.
-		if name == ".snapshots" {
+		// Hard-coded exclusions: the tool's own state directory and VCS metadata
+		// are never snapshotted, regardless of any .gitignore rules. `.git` is
+		// excluded not because .gitignore says so (git never consults ignore
+		// rules for its own plumbing) but because it is internal VCS state.
+		if name == ".snapshots" || name == ".git" {
 			continue
 		}
 

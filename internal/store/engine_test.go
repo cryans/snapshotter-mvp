@@ -344,13 +344,21 @@ func TestEngine_HardcodedSnapshotsExclusion(t *testing.T) {
 
 	engine := newTestEngine(t, workDir, ledgerDir)
 
-	// The tool's own state directory must be excluded even when the user's
-	// .gitignore does not mention it.
+	// The tool's own state directory and VCS metadata must be excluded even
+	// when the user's .gitignore does not mention them.
 	stateDir := filepath.Join(workDir, ".snapshots")
 	if err := os.MkdirAll(filepath.Join(stateDir, ".internal"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(stateDir, ".internal", "events.jsonl"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	gitDir := filepath.Join(workDir, ".git")
+	if err := os.MkdirAll(filepath.Join(gitDir, "objects"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "objects", "packed"), []byte("gitdata"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -372,6 +380,50 @@ func TestEngine_HardcodedSnapshotsExclusion(t *testing.T) {
 	}
 	if event.Changes[0].Path != "tracked.txt" {
 		t.Errorf("Expected only tracked.txt, got %q", event.Changes[0].Path)
+	}
+}
+
+// TestEngine_NestedGitExclusion ensures a .git directory nested inside the tree
+// is pruned too, so a submodule/repo inside the scan root isn't snapshotted.
+func TestEngine_NestedGitExclusion(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	os.WriteFile(filepath.Join(workDir, "top.txt"), []byte("top"), 0644)
+
+	// A nested repo checkout under vendor/.
+	vendor := filepath.Join(workDir, "vendor")
+	nestedGit := filepath.Join(vendor, ".git")
+	if err := os.MkdirAll(filepath.Join(nestedGit, "objects"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(nestedGit, "HEAD"), []byte("ref: refs/heads/main"), 0644)
+	os.WriteFile(filepath.Join(vendor, "lib.go"), []byte("package vendor"), 0644)
+
+	event, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if event == nil {
+		t.Fatalf("Expected event, got nil")
+	}
+
+	paths := map[string]bool{}
+	for _, c := range event.Changes {
+		paths[c.Path] = true
+	}
+	if !paths["top.txt"] {
+		t.Errorf("top.txt should be tracked")
+	}
+	if !paths["vendor/lib.go"] {
+		t.Errorf("vendor/lib.go (non-.git content) should be tracked")
+	}
+	for p := range paths {
+		if strings.Contains(p, ".git/") {
+			t.Errorf("Path under ignored .git dir was tracked: %q", p)
+		}
 	}
 }
 

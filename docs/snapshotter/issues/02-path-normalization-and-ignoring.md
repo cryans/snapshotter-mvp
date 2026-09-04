@@ -16,13 +16,13 @@ Ensure that the directory walker consistently normalizes path separators across 
 
 Design decisions confirmed during implementation:
 - Integrate the standard community `.gitignore` parser (`github.com/sabhiram/go-gitignore`) to parse patterns dynamically, including root + nested `.gitignore` files with git-style semantics.
-- Only the tool's own state directory (`.snapshots`) is hard-coded and unconditionally excluded. Everything else follows `.gitignore` rules; dot-entries or compiled binaries are **not** blanket auto-ignored (e.g. `.git`, `.scratch`, `.go-cache`, `snapshotter_bin` must be listed in a `.gitignore`).
+- Only the tool's own state directory (`.snapshots`) and VCS metadata (`.git`) are hard-coded and unconditionally excluded. Everything else follows `.gitignore` rules; other dot-entries or compiled binaries are **not** blanket auto-ignored (e.g. `.scratch`, `.go-cache`, `snapshotter_bin` must be listed in a `.gitignore`).
 - The single external dependency is documented as an exception in `AGENTS.md` / `spec.md`, which otherwise mandate standard-library Go only.
 
 ## Acceptance Criteria
 - [x] Integrate the `github.com/sabhiram/go-gitignore` library to parse `.gitignore` patterns dynamically, honoring root and nested `.gitignore` files with git-style scoping (see `internal/store/walker.go`).
-- [x] Always ignore the tool's own state directory (`.snapshots`), regardless of `.gitignore` rules.
-- [x] Follow `.gitignore` rules for other exclusions (e.g. `.git`, `.scratch`, `.go-cache`, `snapshotter_bin`) rather than blanket-ignoring every dot-entry or binary.
+- [x] Always ignore the tool's own state directory (`.snapshots`) and VCS metadata (`.git`), regardless of `.gitignore` rules.
+- [x] Follow `.gitignore` rules for other exclusions (e.g. `.scratch`, `.go-cache`, `snapshotter_bin`) rather than blanket-ignoring every dot-entry or binary.
 - [x] Ensure all relative paths generated during physical walk are explicitly converted to forward slashes so the log remains completely platform-independent (Windows/macOS/Linux).
 - [x] Add comprehensive test coverage in `engine_test.go` confirming hard-coded exclusions, root/nested `.gitignore` matching, negation, directory-only patterns, and forward-slash normalization.
 
