@@ -2,10 +2,10 @@
 id: "06"
 title: "Represent newly-ignored files as IGNORED, not DELETE"
 module: "snapshotter"
-status: "in-progress"
+status: "completed"
 branch: "feature/06-ignored-file-representation"
 created: "2026-09-04T12:27:33Z"
-updated: "2026-09-04T12:50:00Z"
+updated: "2026-09-04T13:29:00Z"
 blocked_by: []
 ---
 
