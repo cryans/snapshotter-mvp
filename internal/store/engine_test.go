@@ -766,3 +766,201 @@ func TestEngine_ForwardSlashPaths(t *testing.T) {
 		}
 	}
 }
+
+// TestEngine_Lineage_CreateModifyDelete verifies that sequential mutations of a
+// single file are chained through Change.PreviousID, and that a CREATE starts a
+// fresh lineage (no previous_id).
+func TestEngine_Lineage_CreateModifyDelete(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	filePath := filepath.Join(workDir, "doc.txt")
+
+	// 1. CREATE starts the lineage root.
+	if err := os.WriteFile(filePath, []byte("v1"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	create, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("create snapshot failed: %v", err)
+	}
+	if create == nil || len(create.Changes) != 1 {
+		t.Fatalf("expected a single CREATE, got %+v", create)
+	}
+	createCh := create.Changes[0]
+	if createCh.Action != ActionCreate {
+		t.Fatalf("expected CREATE, got %s", createCh.Action)
+	}
+	if createCh.ID == "" || len(createCh.ID) != 26 {
+		t.Fatalf("expected a 26-char action ID, got %q", createCh.ID)
+	}
+	if createCh.PreviousID != "" {
+		t.Errorf("a CREATE should have no previous_id, got %q", createCh.PreviousID)
+	}
+
+	// 2. MODIFY links back to the CREATE's ID.
+	if err := os.WriteFile(filePath, []byte("v2_modified"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	mod, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("modify snapshot failed: %v", err)
+	}
+	if mod == nil || len(mod.Changes) != 1 {
+		t.Fatalf("expected a single MODIFY, got %+v", mod)
+	}
+	modCh := mod.Changes[0]
+	if modCh.Action != ActionModify {
+		t.Fatalf("expected MODIFY, got %s", modCh.Action)
+	}
+	if modCh.ID == "" || len(modCh.ID) != 26 {
+		t.Errorf("expected a 26-char MODIFY ID, got %q", modCh.ID)
+	}
+	if modCh.PreviousID != createCh.ID {
+		t.Errorf("MODIFY previous_id should reference CREATE id, got %q want %q", modCh.PreviousID, createCh.ID)
+	}
+
+	// 3. DELETE links back to the MODIFY's ID.
+	if err := os.Remove(filePath); err != nil {
+		t.Fatal(err)
+	}
+	del, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("delete snapshot failed: %v", err)
+	}
+	if del == nil || len(del.Changes) != 1 {
+		t.Fatalf("expected a single DELETE, got %+v", del)
+	}
+	delCh := del.Changes[0]
+	if delCh.Action != ActionDelete {
+		t.Fatalf("expected DELETE, got %s", delCh.Action)
+	}
+	if delCh.PreviousID != modCh.ID {
+		t.Errorf("DELETE previous_id should reference MODIFY id, got %q want %q", delCh.PreviousID, modCh.ID)
+	}
+}
+
+// TestEngine_Lineage_MoveThenModify verifies that a rename (MOVE) carries the
+// content lineage across the path change, so a later MODIFY at the new path
+// links back to the MOVE action.
+func TestEngine_Lineage_MoveThenModify(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	oldPath := filepath.Join(workDir, "old.txt")
+	newPath := filepath.Join(workDir, "sub", "new.txt")
+
+	if err := os.WriteFile(oldPath, []byte("same content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	create, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("create snapshot failed: %v", err)
+	}
+	var createCh *Change
+	for i := range create.Changes {
+		if create.Changes[i].Action == ActionCreate && create.Changes[i].Path == "old.txt" {
+			createCh = &create.Changes[i]
+		}
+	}
+	if createCh == nil {
+		t.Fatalf("expected CREATE for old.txt, got %+v", create)
+	}
+
+	// Rename to a subdirectory.
+	if err := os.MkdirAll(filepath.Dir(newPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(oldPath, newPath); err != nil {
+		t.Fatal(err)
+	}
+	move, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("move snapshot failed: %v", err)
+	}
+	var moveCh *Change
+	for i := range move.Changes {
+		if move.Changes[i].Action == ActionMove && move.Changes[i].OldPath == "old.txt" {
+			moveCh = &move.Changes[i]
+		}
+	}
+	if moveCh == nil {
+		t.Fatalf("expected MOVE from old.txt, got %+v", move)
+	}
+	if moveCh.PreviousID != createCh.ID {
+		t.Errorf("MOVE previous_id should reference source CREATE id, got %q want %q", moveCh.PreviousID, createCh.ID)
+	}
+
+	// Modify content at the new path.
+	if err := os.WriteFile(newPath, []byte("changed after move"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	mod, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("modify snapshot failed: %v", err)
+	}
+	var modCh *Change
+	for i := range mod.Changes {
+		if mod.Changes[i].Action == ActionModify && mod.Changes[i].Path == "sub/new.txt" {
+			modCh = &mod.Changes[i]
+		}
+	}
+	if modCh == nil {
+		t.Fatalf("expected MODIFY at new path, got %+v", mod)
+	}
+	if modCh.PreviousID != moveCh.ID {
+		t.Errorf("MODIFY previous_id should reference MOVE id, got %q want %q", modCh.PreviousID, moveCh.ID)
+	}
+}
+
+// TestEngine_Lineage_IgnoredTransition verifies that a newly-ignored file's
+// IGNORED action links back to the last action that produced its active state.
+func TestEngine_Lineage_IgnoredTransition(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	filePath := filepath.Join(workDir, "secret.log")
+	if err := os.WriteFile(filePath, []byte("sensitive"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	create, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("create snapshot failed: %v", err)
+	}
+	var createCh *Change
+	for i := range create.Changes {
+		if create.Changes[i].Action == ActionCreate && create.Changes[i].Path == "secret.log" {
+			createCh = &create.Changes[i]
+		}
+	}
+	if createCh == nil {
+		t.Fatalf("expected CREATE for secret.log, got %+v", create)
+	}
+
+	if err := os.WriteFile(filepath.Join(workDir, ".gitignore"), []byte("*.log\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ign, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("ignore snapshot failed: %v", err)
+	}
+	if ign == nil {
+		t.Fatalf("expected an IGNORED transition, got nil")
+	}
+	var ignCh *Change
+	for i := range ign.Changes {
+		if ign.Changes[i].Action == ActionIgnored && ign.Changes[i].Path == "secret.log" {
+			ignCh = &ign.Changes[i]
+		}
+	}
+	if ignCh == nil {
+		t.Fatalf("expected IGNORED for secret.log, got %+v", ign)
+	}
+	if ignCh.PreviousID != createCh.ID {
+		t.Errorf("IGNORED previous_id should reference source CREATE id, got %q want %q", ignCh.PreviousID, createCh.ID)
+	}
+}
+
