@@ -41,7 +41,9 @@ func (e *Engine) State() *Projection {
 
 // Snapshot scans the directory, diffs against the projection, appends a commit, and updates state.
 func (e *Engine) Snapshot(dir string) (*CommitEvent, error) {
-	changes, err := e.diff(dir)
+	now := time.Now().UTC()
+
+	changes, err := e.diff(dir, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute diff: %w", err)
 	}
@@ -51,14 +53,12 @@ func (e *Engine) Snapshot(dir string) (*CommitEvent, error) {
 		return nil, nil
 	}
 
-	now := time.Now().UTC()
 	commit := &CommitEvent{
 		ID:        NewCommitID(now),
 		Timestamp: now,
 		Message:   "Snapshot",
 		Changes:   changes,
 	}
-
 	if err := e.ledger.Append(commit); err != nil {
 		return nil, fmt.Errorf("failed to append ledger: %w", err)
 	}
@@ -67,7 +67,7 @@ func (e *Engine) Snapshot(dir string) (*CommitEvent, error) {
 	return commit, nil
 }
 
-func (e *Engine) diff(dir string) ([]Change, error) {
+func (e *Engine) diff(dir string, now time.Time) ([]Change, error) {
 	type diskFile struct {
 		path string
 		info os.FileInfo
@@ -140,34 +140,39 @@ func (e *Engine) diff(dir string) ([]Change, error) {
 			// Modified
 			if state.Hash != hash {
 				changes = append(changes, Change{
-					Action:  ActionModify,
-					Path:    relPath,
-					Hash:    hash,
-					Size:    df.info.Size(),
-					ModTime: df.info.ModTime(),
+					Action:     ActionModify,
+					Path:       relPath,
+					Hash:       hash,
+					Size:       df.info.Size(),
+					ModTime:    df.info.ModTime(),
+					ID:         NewCommitID(now),
+					PreviousID: state.LastActionID,
 				})
 			}
 		} else {
 			// Check if it's a move by correlating the hash
 			if oldState, ok := missingByHash[hash]; ok {
 				changes = append(changes, Change{
-					Action:  ActionMove,
-					Path:    relPath,
-					OldPath: oldState.Path,
-					Hash:    hash,
-					Size:    df.info.Size(),
-					ModTime: df.info.ModTime(),
+					Action:     ActionMove,
+					Path:       relPath,
+					OldPath:    oldState.Path,
+					Hash:       hash,
+					Size:       df.info.Size(),
+					ModTime:    df.info.ModTime(),
+					ID:         NewCommitID(now),
+					PreviousID: oldState.LastActionID,
 				})
 				delete(missingActive, oldState.Path) // consumed by move
 				delete(missingByHash, hash)
 			} else {
-				// Truly a new file
+				// Truly a new file (a fresh lineage root).
 				changes = append(changes, Change{
 					Action:  ActionCreate,
 					Path:    relPath,
 					Hash:    hash,
 					Size:    df.info.Size(),
 					ModTime: df.info.ModTime(),
+					ID:      NewCommitID(now),
 				})
 			}
 		}
@@ -176,8 +181,10 @@ func (e *Engine) diff(dir string) ([]Change, error) {
 	// 4. Remaining missing (physically absent) files are true Deletes
 	for path := range missingActive {
 		changes = append(changes, Change{
-			Action: ActionDelete,
-			Path:   path,
+			Action:     ActionDelete,
+			Path:       path,
+			ID:         NewCommitID(now),
+			PreviousID: e.state.ActiveFiles[path].LastActionID,
 		})
 	}
 
@@ -185,8 +192,10 @@ func (e *Engine) diff(dir string) ([]Change, error) {
 	// history remains intact; only live tracking stops.
 	for path := range ignoredActive {
 		changes = append(changes, Change{
-			Action: ActionIgnored,
-			Path:   path,
+			Action:     ActionIgnored,
+			Path:       path,
+			ID:         NewCommitID(now),
+			PreviousID: e.state.ActiveFiles[path].LastActionID,
 		})
 	}
 

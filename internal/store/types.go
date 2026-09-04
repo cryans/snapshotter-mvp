@@ -16,13 +16,22 @@ const (
 )
 
 // Change represents a single modification to the file system state.
+//
+// ID is a unique, statelessly-generated 26-character Crockford Base32 ULID that
+// identifies this action. PreviousID optionally references the ID of the action
+// that produced the immediately-previous version of this logical file, forming
+// an explicit content lineage (e.g. CREATE -> MODIFY -> DELETE). A CREATE that
+// starts a fresh lineage, or a change whose predecessor predates lineage
+// tracking (legacy ledger entries), leaves PreviousID empty.
 type Change struct {
-	Action  ActionType `json:"action"`
-	Path    string     `json:"path"`
-	Hash    string     `json:"hash,omitempty"`
-	OldPath string     `json:"old_path,omitempty"` // Only used for MOVE actions
-	Size    int64      `json:"size,omitempty"`
-	ModTime time.Time  `json:"mod_time,omitempty"`
+	Action     ActionType `json:"action"`
+	Path       string     `json:"path"`
+	Hash       string     `json:"hash,omitempty"`
+	OldPath    string     `json:"old_path,omitempty"` // Only used for MOVE actions
+	Size       int64      `json:"size,omitempty"`
+	ModTime    time.Time  `json:"mod_time,omitempty"`
+	ID         string     `json:"id"`
+	PreviousID string     `json:"previous_id,omitempty"`
 }
 
 // CommitEvent represents a complete snapshot transaction.
@@ -39,6 +48,11 @@ type FileState struct {
 	Hash    string    `json:"hash"`
 	Size    int64     `json:"size"`
 	ModTime time.Time `json:"mod_time"`
+	// LastActionID is the ID of the action that produced the current version of
+	// this active file. The engine reads it to link the next mutation (MODIFY,
+	// MOVE, DELETE, IGNORED) via Change.PreviousID. Empty for legacy entries
+	// that predate lineage tracking.
+	LastActionID string `json:"last_action_id,omitempty"`
 }
 
 // Tombstone marks a previously tracked file that has been deleted.

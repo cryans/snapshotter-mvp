@@ -15,10 +15,11 @@ func (p *Projection) Apply(commit *CommitEvent) {
 		switch change.Action {
 		case ActionCreate, ActionModify:
 			p.ActiveFiles[change.Path] = FileState{
-				Path:    change.Path,
-				Hash:    change.Hash,
-				Size:    change.Size,
-				ModTime: change.ModTime,
+				Path:         change.Path,
+				Hash:         change.Hash,
+				Size:         change.Size,
+				ModTime:      change.ModTime,
+				LastActionID: change.ID,
 			}
 			// If a file is recreated at a path that was previously tombstoned,
 			// we remove the tombstone to reflect its active status.
@@ -71,10 +72,11 @@ func (p *Projection) Apply(commit *CommitEvent) {
 
 			// Add to new location
 			p.ActiveFiles[change.Path] = FileState{
-				Path:    change.Path,
-				Hash:    hash,
-				Size:    size,
-				ModTime: modTime,
+				Path:         change.Path,
+				Hash:         hash,
+				Size:         size,
+				ModTime:      modTime,
+				LastActionID: change.ID,
 			}
 			delete(p.Tombstones, change.Path)
 		}

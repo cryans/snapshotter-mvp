@@ -5,7 +5,7 @@
 > sequencing). **No code changes live here**; this branch only refines issues and
 > roadmap `.md` files.
 >
-> Last updated: 2026-09-04T13:29:00Z
+> Last updated: 2026-09-04T13:56:23Z
 
 ## Backlog status snapshot
 
@@ -15,7 +15,7 @@
 | 02 | Path Normalization & Ignoring | `completed` | Foundation |
 | 03 | Interactive TUI File History Viewer | `ready-to-implement` | After `05`; `blocked_by [01, 02]` satisfied |
 | 04 | Snapshot Rollbacks & Restorations | `ready-to-implement` | After `05` |
-| 05 | Action Lineage & Unique Identifiers | `ready-to-implement` | **Foundation — next to pick up** |
+| 05 | Action Lineage & Unique Identifiers | `completed` | Implemented — lineage schema + reducer + tests |
 | 06 | Represent newly-ignored files as IGNORED, not DELETE | `completed` | Code already merged to `main`, all ACs `[x]` |
 | 07 | End-to-end engine integration tests | `completed` | |
 | 08 | CLI snapshot header dominant-action label | `proposed` | Output-only change |
@@ -45,9 +45,11 @@ Even though it is not a hard blocker, `05` should be scheduled **before** `03` a
 
 ## Proposed build order
 
-1. `01`, `02` — done (foundation).
-2. **`05` — Action Lineage** (next: change-event schema + projection-reducer foundation).
+1. `01`, `02`, `05`, `06`, `07` — done (foundation + lineage + tests).
+2. **`05` — Action Lineage** — change-event schema (`Change` gains `id` / `previous_id`)
+   and projection-reducer foundation.
 3. `04` and/or `03` — restore & TUI history, now lineage-capable. Relative order between
    them is a product-priority call (data recovery vs. browsing) — decide at pick-up.
+   **These are now the next items to pick up after `05`.**
 4. `08` — small independent CLI-output improvement (can be slotted anywhere, incl. now).
-5. Housekeeping: `06` flipped to `completed` (code already merged to `main`) — done this session.
+5. Housekeeping: `06` flipped to `completed`; `05` flipped to `completed` this session.

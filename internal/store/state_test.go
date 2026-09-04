@@ -182,3 +182,52 @@ func TestLoadProjection(t *testing.T) {
 		t.Errorf("Expected file1.txt hash to be 'bbb'")
 	}
 }
+
+func TestProjection_TracksLastActionID(t *testing.T) {
+	proj := NewProjection()
+	now := time.Now()
+
+	// A CREATE lands the file active and records its action ID.
+	proj.Apply(&CommitEvent{
+		ID: "C1", Timestamp: now,
+		Changes: []Change{{
+			Action: ActionCreate, Path: "a.txt", Hash: "h1", ID: "ACTION-CREATE",
+		}},
+	})
+	if got := proj.ActiveFiles["a.txt"].LastActionID; got != "ACTION-CREATE" {
+		t.Errorf("after CREATE, LastActionID = %q, want ACTION-CREATE", got)
+	}
+
+	// A subsequent MODIFY advances the recorded last action ID.
+	proj.Apply(&CommitEvent{
+		ID: "C2", Timestamp: now.Add(time.Minute),
+		Changes: []Change{{
+			Action: ActionModify, Path: "a.txt", Hash: "h2", ID: "ACTION-MODIFY",
+		}},
+	})
+	if got := proj.ActiveFiles["a.txt"].LastActionID; got != "ACTION-MODIFY" {
+		t.Errorf("after MODIFY, LastActionID = %q, want ACTION-MODIFY", got)
+	}
+
+	// A DELETE removes the active entry entirely, so no LastActionID remains.
+	proj.Apply(&CommitEvent{
+		ID: "C3", Timestamp: now.Add(2 * time.Minute),
+		Changes: []Change{{
+			Action: ActionDelete, Path: "a.txt", ID: "ACTION-DELETE",
+		}},
+	})
+	if _, ok := proj.ActiveFiles["a.txt"]; ok {
+		t.Errorf("deleted file should not remain active")
+	}
+
+	// A MOVE establishes the active entry at the new path with the MOVE's ID.
+	proj.Apply(&CommitEvent{
+		ID: "C4", Timestamp: now.Add(3 * time.Minute),
+		Changes: []Change{{
+			Action: ActionMove, Path: "b.txt", OldPath: "c.txt", Hash: "h3", ID: "ACTION-MOVE",
+		}},
+	})
+	if got := proj.ActiveFiles["b.txt"].LastActionID; got != "ACTION-MOVE" {
+		t.Errorf("after MOVE, new-path LastActionID = %q, want ACTION-MOVE", got)
+	}
+}
