@@ -2,10 +2,10 @@
 id: "05"
 title: "Action Lineage and Unique Identifiers"
 module: "snapshotter"
-status: "proposed"
+status: "ready-to-implement"
 branch: ""
 created: "2026-09-04T12:45:00Z"
-updated: "2026-09-04T12:50:00Z"
+updated: "2026-09-04T13:29:00Z"
 blocked_by: []
 ---
 
@@ -19,3 +19,9 @@ Introduce a unique identifier for every change action inside a commit event, alo
 - [ ] Add an optional `previous_id` string field to the action/change struct to reference the prior version of that file.
 - [ ] Update the state projection reducer to track and resolve the latest action IDs for active files so the engine can look them up and link them as `previous_id` during new commit events.
 - [ ] Add rigorous unit tests that verify sequential changes (e.g., CREATE followed by MODIFY) properly propagate and match the correct `previous_id` to their previous state's `id`.
+
+## Ordering & Rationale (roadmap)
+- This issue is **foundation work**: it extends the shared change-event schema (`Change`
+  gains `id` / `previous_id`) and the projection reducer, so it should land **before** the
+  history/restore consumers `03` and `04`. See `docs/snapshotter/roadmap.md`.
+- Not blocked by anything; it is the next scheduled item after `01`/`02`.

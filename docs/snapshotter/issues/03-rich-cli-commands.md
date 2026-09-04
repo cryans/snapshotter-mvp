@@ -2,10 +2,10 @@
 id: "03"
 title: "Interactive TUI File History Viewer"
 module: "snapshotter"
-status: "proposed"
+status: "ready-to-implement"
 branch: ""
 created: "2026-09-04T12:00:00Z"
-updated: "2026-09-04T13:00:00Z"
+updated: "2026-09-04T13:29:00Z"
 blocked_by: ["01", "02"]
 ---
 
@@ -29,3 +29,11 @@ When a user targets a file with `snapshotter <filename>`, launch an interactive 
 - [ ] Display historical entries ordered newest-first with accurate `(current)`, `(deleted)`, and `(moved)` annotations.
 - [ ] Wire up `Enter` on a `(moved)` entry to transition the view to the history of the new file location.
 - [ ] Provide clean error handling if the specified file does not exist in both active workspace and ledger.
+
+## Ordering & Rationale (roadmap)
+- **Sequencing:** land `05` (Action Lineage) before this issue. Its history traversal is a
+  consumer of the shared change-event model that `05` extends; writing it against the final
+  schema avoids retrofitting lineage later. See `docs/snapshotter/roadmap.md`.
+- This is an **ordering/priority** relationship, *not* a hard dependency: the
+  chronological `(current)`/`(deleted)`/`(moved)` view described here is implementable today
+  from commit ULIDs, timestamps and the `.moved` path markers.
