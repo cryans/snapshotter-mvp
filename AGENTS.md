@@ -6,7 +6,7 @@ This document provides essential context, architectural rules, and layout constr
 For documentation layout, file-based issue tracking, and issue templates, refer to `docs/standards.md`.
 
 ## Project Purpose
-`snapshotter` is a local-first, deterministic file snapshotting engine designed to run entirely in user-space with zero external dependencies (standard-library Go only, Go 1.23+). 
+`snapshotter` is a local-first, deterministic file snapshotting engine designed to run almost entirely in user-space. Code is standard-library Go only (Go 1.23+) with **one documented dependency exception**: `github.com/sabhiram/go-gitignore`, used to parse `.gitignore` patterns in `internal/store/walker.go`. Keep any further dependencies out.
 
 Instead of daemon-based file-system watching (e.g., `fsnotify`), it relies on a clean, unidirectional data flow:
 `Physical Disk Walk -> Pure Diff Engine -> CommitEvent -> Append Ledger & Blobs -> Update Projection`
@@ -43,14 +43,15 @@ All tool metadata and history live inside a directory named `.snapshots/` at the
 
 ---
 
-## Directory Exclusions (Strict Rules)
-When scanning the working directory, the walker **must** ignore the following directories and files to avoid infinite loops, self-snapshots, or committing massive localized caches:
+## Directory Exclusions
+To avoid infinite loops, self-snapshots, or committing massive localized caches, the walker enforces a small hard-coded default plus standard `.gitignore` semantics:
 
-1. **Internal Tool State**: `.snapshots/`
-2. **Local Workspace Cache**: `.go-cache/` and `.go-mod-cache/` (used by the sandbox runner)
-3. **Spec and Issue Tracking**: `.scratch/`
-4. **VCS Directories**: `.git/`
-5. **Compiled Executables**: Any compiled binary (e.g., `snapshotter_bin`)
+1. **Hard-coded (always excluded, non-overridable)**: the tool's own state dir `.snapshots/`. The walker never snapshots its own ledger, regardless of `.gitignore`.
+2. **Everything else is `.gitignore`-driven** (`internal/store/walker.go` via `github.com/sabhiram/go-gitignore`, root + nested files, git-style). Blanket auto-ignoring of every dot-entry or binary is **not** done. To exclude the sandbox caches, spec/issue tracking, VCS metadata, or compiled binaries during real runs, users list them in a `.gitignore`:
+   - Local workspace cache: `.go-cache/`, `.go-mod-cache/`
+   - Spec and issue tracking: `.scratch/`
+   - VCS directories: `.git/`
+   - Compiled executables, e.g. `snapshotter_bin`
 
 ---
 

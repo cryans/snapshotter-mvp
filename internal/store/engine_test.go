@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -274,47 +275,264 @@ func TestEngine_Exclusions(t *testing.T) {
 
 	engine := newTestEngine(t, workDir, ledgerDir)
 
-	// Create normal tracking file
+	// A .gitignore that ignores common build artifacts and caches. The engine
+	// must follow these rules rather than auto-ignoring arbitrary dot-entries.
+	gitignore := []byte(".go-cache/\n.scratch/\n*.log\nsnapshotter_bin\nbin/\n")
+	if err := os.WriteFile(filepath.Join(workDir, ".gitignore"), gitignore, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a normal tracking file.
 	if err := os.WriteFile(filepath.Join(workDir, "tracked.txt"), []byte("tracked"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Create excluded directories
-	ignoredDirs := []string{".snapshots", ".scratch", ".git", ".go-cache", ".any-dot-dir"}
-	for _, dirName := range ignoredDirs {
+	// Dot directories and build artifacts that .gitignore rules exclude.
+	for _, dirName := range []string{".scratch", ".go-cache", "bin"} {
 		dirPath := filepath.Join(workDir, dirName)
 		if err := os.MkdirAll(dirPath, 0755); err != nil {
 			t.Fatal(err)
 		}
-		// Create file inside ignored directory
 		if err := os.WriteFile(filepath.Join(dirPath, "should_be_ignored.txt"), []byte("ignored"), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// Create ignored files at the root
-	ignoredFiles := []string{".hidden_file", "snapshotter_bin"}
-	for _, fileName := range ignoredFiles {
+	// Ignored files at the root.
+	for _, fileName := range []string{"debug.log", "snapshotter_bin"} {
 		if err := os.WriteFile(filepath.Join(workDir, fileName), []byte("ignored file"), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// Snapshot
+	// This should NOT be auto-ignored: our design does not blanket-exclude every
+	// dot-entry, only what the .gitignore rules say plus the hard .snapshots rule.
+	dotTracked := filepath.Join(workDir, ".tracked-dotfile")
+	if err := os.WriteFile(dotTracked, []byte("dot tracked"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	event, err := engine.Snapshot(workDir)
 	if err != nil {
 		t.Fatalf("Snapshot failed: %v", err)
 	}
 	if event == nil {
-		t.Fatalf("Expected event with 1 change, got nil")
+		t.Fatalf("Expected event with changes, got nil")
 	}
 
-	// We should only have 1 change corresponding to tracked.txt
+	got := make(map[string]bool)
+	for _, c := range event.Changes {
+		got[c.Path] = true
+	}
+
+	for path := range got {
+		if path != "tracked.txt" && path != ".gitignore" && path != ".tracked-dotfile" {
+			t.Errorf("Unexpected tracked path: %q", path)
+		}
+	}
+
+	for _, required := range []string{"tracked.txt", ".gitignore", ".tracked-dotfile"} {
+		if !got[required] {
+			t.Errorf("Expected %q to be tracked, but it was not", required)
+		}
+	}
+}
+
+func TestEngine_HardcodedSnapshotsExclusion(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	// The tool's own state directory must be excluded even when the user's
+	// .gitignore does not mention it.
+	stateDir := filepath.Join(workDir, ".snapshots")
+	if err := os.MkdirAll(filepath.Join(stateDir, ".internal"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, ".internal", "events.jsonl"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// No .gitignore present, so nothing else is excluded.
+	if err := os.WriteFile(filepath.Join(workDir, "tracked.txt"), []byte("tracked"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	event, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if event == nil {
+		t.Fatalf("Expected event with changes, got nil")
+	}
+
 	if len(event.Changes) != 1 {
-		t.Fatalf("Expected exactly 1 tracked file change, got %d: %+v", len(event.Changes), event.Changes)
+		t.Fatalf("Expected exactly 1 tracked file, got %d: %+v", len(event.Changes), event.Changes)
+	}
+	if event.Changes[0].Path != "tracked.txt" {
+		t.Errorf("Expected only tracked.txt, got %q", event.Changes[0].Path)
+	}
+}
+
+func TestEngine_GitIgnoreNegation(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	// Ignore all logs, then re-include important.log within the same file.
+	gi := []byte("*.log\n!important.log\n")
+	if err := os.WriteFile(filepath.Join(workDir, ".gitignore"), gi, 0644); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(workDir, "debug.log"), []byte("debug"), 0644)
+	os.WriteFile(filepath.Join(workDir, "important.log"), []byte("keep me"), 0644)
+
+	event, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if event == nil {
+		t.Fatalf("Expected event, got nil")
 	}
 
-	if event.Changes[0].Path != "tracked.txt" {
-		t.Errorf("Expected only tracked.txt to be snapshot, but got: %s", event.Changes[0].Path)
+	paths := map[string]bool{}
+	for _, c := range event.Changes {
+		paths[c.Path] = true
+	}
+	if paths["debug.log"] {
+		t.Errorf("debug.log should be ignored")
+	}
+	if !paths["important.log"] {
+		t.Errorf("important.log should be re-included via negation")
+	}
+	if !paths[".gitignore"] {
+		t.Errorf(".gitignore should be tracked")
+	}
+}
+
+func TestEngine_GitIgnoreDirectoryOnly(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	// Directory-only pattern (trailing slash) must prune the whole subtree.
+	gi := []byte("build/\n")
+	if err := os.WriteFile(filepath.Join(workDir, ".gitignore"), gi, 0644); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(workDir, "keep.txt"), []byte("keep"), 0644)
+	deep := filepath.Join(workDir, "build", "out", "artifact.bin")
+	if err := os.MkdirAll(filepath.Dir(deep), 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(deep, []byte("binary"), 0644)
+
+	event, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if event == nil {
+		t.Fatalf("Expected event, got nil")
+	}
+
+	paths := map[string]bool{}
+	for _, c := range event.Changes {
+		paths[c.Path] = true
+	}
+	if !paths["keep.txt"] {
+		t.Errorf("keep.txt should be tracked")
+	}
+	for p := range paths {
+		if len(p) >= 5 && p[:6] == "build/" {
+			t.Errorf("Path under ignored build/ dir was tracked: %q", p)
+		}
+	}
+}
+
+func TestEngine_NestedGitIgnore(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	// Root .gitignore ignores nothing by default; a nested subproject applies its
+	// own additional rules scoped to its directory.
+	subDir := filepath.Join(workDir, "subproject")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	nestedGi := []byte("*.tmp\nlocal-secret/\n")
+	if err := os.WriteFile(filepath.Join(subDir, ".gitignore"), nestedGi, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	os.WriteFile(filepath.Join(subDir, "main.go"), []byte("package sub"), 0644)
+	os.WriteFile(filepath.Join(subDir, "scratch.tmp"), []byte("temp"), 0644)
+	if err := os.MkdirAll(filepath.Join(subDir, "local-secret"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(subDir, "local-secret", "key.pem"), []byte("secret"), 0644)
+
+	event, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if event == nil {
+		t.Fatalf("Expected event, got nil")
+	}
+
+	paths := map[string]bool{}
+	for _, c := range event.Changes {
+		paths[c.Path] = true
+	}
+	if !paths["subproject/main.go"] {
+		t.Errorf("subproject/main.go should be tracked")
+	}
+	if paths["subproject/scratch.tmp"] {
+		t.Errorf("subproject/scratch.tmp should be ignored by nested rule")
+	}
+	for p := range paths {
+		if len(p) >= len("subproject/local-secret/") && p[:len("subproject/local-secret/")] == "subproject/local-secret/" {
+			t.Errorf("Path under ignored nested dir was tracked: %q", p)
+		}
+	}
+	if !paths["subproject/.gitignore"] {
+		t.Errorf("nested .gitignore should be tracked")
+	}
+}
+
+func TestEngine_ForwardSlashPaths(t *testing.T) {
+	// Paths emitted by the engine must always use forward slashes so the ledger
+	// stays platform-independent, even on Windows where os.PathSeparator is '\\'.
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	deep := filepath.Join(workDir, "a", "b", "c.txt")
+	if err := os.MkdirAll(filepath.Dir(deep), 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(deep, []byte("nested"), 0644)
+
+	event, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if event == nil {
+		t.Fatalf("Expected event, got nil")
+	}
+	for _, c := range event.Changes {
+		for _, r := range c.Path {
+			if r == filepath.Separator && r != '/' {
+				t.Errorf("Path %q contains a native path separator", c.Path)
+			}
+		}
+		if !strings.Contains(c.Path, "/") {
+			t.Errorf("Expected forward slashes in path, got %q", c.Path)
+		}
 	}
 }

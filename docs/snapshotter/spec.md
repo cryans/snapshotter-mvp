@@ -12,4 +12,5 @@ A local-first, deterministic file snapshotting engine.
    - Moves (New Location): `.snapshots/<new_path>/<timestamp>.<ext>.moved_from` (contains old path) followed by actual content file.
 3. **Identifiers**: Statelessly generated 26-character Crockford Base32 ULIDs.
 4. **Move Detection**: Purely in-memory correlation of identical hashes between missing active files and new untracked files.
-5. **Tech Stack**: Standard library Go 1.23 only for `internal/store`.
+5. **Exclusions**: `.snapshots/` (the tool's own state) is always hard-excluded from any walk. All other exclusions (e.g. `.git/`, `.scratch/`, `.go-cache/`, compiled binaries) are governed by the standard `.gitignore` parser — users list them in a `.gitignore` rather than relying on blanket dot-file or binary-name auto-ignoring.
+6. **Tech Stack**: Standard library Go 1.23 for `internal/store`, with the single documented exception of `github.com/sabhiram/go-gitignore` for parsing `.gitignore` rules (see `AGENTS.md`).

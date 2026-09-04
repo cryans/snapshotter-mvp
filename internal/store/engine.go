@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -71,44 +70,22 @@ func (e *Engine) Snapshot(dir string) (*CommitEvent, error) {
 func (e *Engine) diff(dir string) ([]Change, error) {
 	type diskFile struct {
 		path string
-		info fs.FileInfo
+		info os.FileInfo
 		hash string
 	}
 	diskFiles := make(map[string]*diskFile)
-	
-	// 1. Walk the physical disk
-	err := filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		
-		// Skip directories themselves, but recurse into them
-		if info.IsDir() {
-			name := info.Name()
-			// Ignore any directory starting with "." (e.g. .snapshots, .scratch, .git, .go-cache)
-			if len(name) > 0 && name[0] == '.' {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		
-		name := info.Name()
-		// Ignore any file starting with "." or named snapshotter_bin
-		if (len(name) > 0 && name[0] == '.') || name == "snapshotter_bin" {
-			return nil
-		}
-		
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		
-		diskFiles[rel] = &diskFile{path: path, info: info}
-		return nil
-	})
+
+	// 1. Walk the physical disk, honoring .gitignore rules and hard exclusions.
+	tracked, err := newWalker(dir).collect()
 	if err != nil {
 		return nil, err
+	}
+	for _, tf := range tracked {
+		info, err := os.Stat(tf.abs)
+		if err != nil {
+			return nil, err
+		}
+		diskFiles[tf.rel] = &diskFile{path: tf.abs, info: info}
 	}
 
 	var changes []Change
