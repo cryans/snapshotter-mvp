@@ -24,6 +24,12 @@ func main() {
 		log.Fatalf("Failed to initialize snapshot engine: %v", err)
 	}
 
+	// Subcommand dispatch.
+	if len(os.Args) > 1 && os.Args[1] == "restore" {
+		runRestore(engine, os.Args[2:])
+		return
+	}
+
 	// Trigger a snapshot
 	event, err := engine.Snapshot(workDir)
 	if err != nil {
@@ -51,4 +57,28 @@ func main() {
 			fmt.Printf("  [>] %s -> %s\n", change.OldPath, change.Path)
 		}
 	}
+}
+
+// runRestore implements `snapshotter restore <commit-id> <path>`: it resets a
+// single file to the content it held at the given commit.
+func runRestore(engine *store.Engine, args []string) {
+	if len(args) != 2 {
+		fmt.Fprintln(os.Stderr, "usage: snapshotter restore <commit-id> <path>")
+		os.Exit(2)
+	}
+	commitID, path := args[0], args[1]
+
+	result, err := engine.Restore(commitID, path)
+	if err != nil {
+		log.Fatalf("Restore failed: %v", err)
+	}
+
+	if result.BackupPath != "" {
+		fmt.Printf("Backed up divergent content to: %s\n", result.BackupPath)
+	}
+	if !result.Restored {
+		fmt.Printf("%s is already at its state for commit %s (no changes).\n", path, commitID)
+		return
+	}
+	fmt.Printf("Restored %s to commit %s.\n", path, commitID)
 }
