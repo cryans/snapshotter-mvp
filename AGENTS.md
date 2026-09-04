@@ -5,6 +5,12 @@ This document provides essential context, architectural rules, and layout constr
 ## Repository Standards & Issue Workflow
 For documentation layout, file-based issue tracking, and issue templates, refer to `docs/standards.md`.
 
+## Git Hygiene
+Never run `git add`, `git commit`, or `git push` unless the user has explicitly asked you to do so. Make changes to the working tree freely, but leave version-control staging, committing, and pushing to the user unless directly requested.
+
+## Build & Test
+Prefer the provided `Makefile` over invoking Go directly for common tasks. Use `make build`, `make run`, and `make test` (and `make clean`) whenever they fit; fall back to raw `go`/`go test` only when a task is not covered by a target.
+
 ## Project Purpose
 `snapshotter` is a local-first, deterministic file snapshotting engine designed to run almost entirely in user-space. Code is standard-library Go only (Go 1.23+) with **one documented dependency exception**: `github.com/sabhiram/go-gitignore`, used to parse `.gitignore` patterns in `internal/store/walker.go`. Keep any further dependencies out.
 
