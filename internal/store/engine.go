@@ -12,15 +12,16 @@ import (
 
 // Engine orchestrates the snapshot process by integrating the ledger, state, and diff logic.
 type Engine struct {
-	workDir string
-	ledger  *Ledger
-	state   *Projection
+	workDir     string
+	snapshotDir string
+	ledger      *Ledger
+	state       *Projection
 }
 
 // NewEngine initializes a new Engine.
 func NewEngine(workDir, snapshotDir string) (*Engine, error) {
 	ledger := NewLedger(workDir, snapshotDir)
-	
+
 	eventsPath := filepath.Join(snapshotDir, ".internal", "events.jsonl")
 	state, err := LoadProjection(eventsPath)
 	if err != nil {
@@ -28,10 +29,17 @@ func NewEngine(workDir, snapshotDir string) (*Engine, error) {
 	}
 
 	return &Engine{
-		workDir: workDir,
-		ledger:  ledger,
-		state:   state,
+		workDir:     workDir,
+		snapshotDir: snapshotDir,
+		ledger:      ledger,
+		state:       state,
 	}, nil
+}
+
+// eventsPath returns the absolute path of the append-only JSONL ledger, the
+// source of truth every projection (including historical ones) is rebuilt from.
+func (e *Engine) eventsPath() string {
+	return filepath.Join(e.snapshotDir, ".internal", "events.jsonl")
 }
 
 // State returns the current in-memory view of the file system.
@@ -89,7 +97,7 @@ func (e *Engine) diff(dir string, now time.Time) ([]Change, error) {
 	}
 
 	var changes []Change
-	
+
 	// 2. Partition active files missing from the disk into two buckets:
 	//    - still present on disk but excluded by an ignore rule -> "ignored"
 	//    - physically absent -> potential move source or true delete
@@ -111,7 +119,7 @@ func (e *Engine) diff(dir string, now time.Time) ([]Change, error) {
 			missingActive[path] = state
 		}
 	}
-	
+
 	// Index truly-missing files by hash to quickly find move targets. Files that
 	// are merely ignored are excluded here: their content is still at the old
 	// path, so matching an identical new file is a copy/CREATE, not a MOVE.
@@ -123,19 +131,19 @@ func (e *Engine) diff(dir string, now time.Time) ([]Change, error) {
 	// 3. Evaluate existing files (Creates, Modifies, Moves, or Unchanged)
 	for relPath, df := range diskFiles {
 		state, exists := e.state.ActiveFiles[relPath]
-		
+
 		// Optimization: if size and modtime exactly match, skip hashing
 		if exists && state.Size == df.info.Size() && state.ModTime.Equal(df.info.ModTime()) {
 			continue
 		}
-		
+
 		// Hash the file
 		hash, err := hashFileInternal(df.path)
 		if err != nil {
 			return nil, err
 		}
 		df.hash = hash
-		
+
 		if exists {
 			// Modified
 			if state.Hash != hash {
