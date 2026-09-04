@@ -1,11 +1,9 @@
 # Snapshotter Roadmap / Release Scoping
 
-> Refinement session on `refinement/issue-05-lineage-prep` — agreed build order for the
-> open backlog, grounded in real dependencies (hard blockers vs shared-foundation
-> sequencing). **No code changes live here**; this branch only refines issues and
-> roadmap `.md` files.
+> Build-order and backlog tracking for `snapshotter`. **No code changes live here**; this
+> file only records issue status and pick-up order.
 >
-> Last updated: 2026-09-04T13:56:23Z
+> Last updated: 2026-09-04T15:05:00Z
 
 ## Backlog status snapshot
 
@@ -13,43 +11,28 @@
 |-------|-------|--------|-------|
 | 01 | Event Ledger Core State | `completed` | Foundation |
 | 02 | Path Normalization & Ignoring | `completed` | Foundation |
-| 03 | Interactive TUI File History Viewer | `ready-to-implement` | After `05`; `blocked_by [01, 02]` satisfied |
-| 04 | Snapshot Rollbacks & Restorations | `ready-to-implement` | After `05` |
+| 03 | Interactive TUI File History Viewer | `completed` | Merged to `main` (`cb9440c`) |
+| 04 | Snapshot Rollbacks & Restorations | `completed` | Merged to `main` (`90de1b2`) |
 | 05 | Action Lineage & Unique Identifiers | `completed` | Implemented — lineage schema + reducer + tests |
 | 06 | Represent newly-ignored files as IGNORED, not DELETE | `completed` | Code already merged to `main`, all ACs `[x]` |
 | 07 | End-to-end engine integration tests | `completed` | |
-| 08 | CLI snapshot header dominant-action label | `proposed` | Output-only change |
+| 08 | CLI snapshot header dominant-action label | `proposed` | Output-only change; independent |
+| 09 | Engine diff can miss equal-length modifications within timestamp granularity | `proposed` | Real engine correctness bug; independent |
 
-## Dependency facts (hard blockers)
+Foundation + lineage + restores + TUI are all landed: **01–07 are done**. The remaining
+backlog is **08** and **09**. Nothing is hard-blocked; both are implementable against the
+current schema and are independent of each other.
 
-- Hard dependencies only:
-  - `03` ← `{01, 02}` (both satisfied).
-  - `04` ← `{01}` (satisfied).
-  - `05` ← `{}`.
-  - `08` ← `{}`.
-- **`03` and `04` are *not* hard-blocked by `05`.** Each is implementable and testable
-  against the current change-event model (commit ULID + timestamp + path + move markers)
-  without `id`/`previous_id`.
+## Pick-up order for next session
 
-## Shared-foundation sequencing (why `05` goes first)
-
-Even though it is not a hard blocker, `05` should be scheduled **before** `03` and `04`:
-
-- `05` mutates the **shared change-event schema** (`Change` gains `id` / `previous_id`)
-  and the **projection reducer**, plus ledger/tests on that model.
-- `03`'s history traversal and `04`'s restore resolution are consumers of that same event
-  model. Writing them after `05` means they target the final schema and can use lineage
-  (trace a logical file across renames; restore content that lived at moved paths) instead
-  of retrofitting it later.
-- Therefore: **`05` → then `{03, 04}`**. `08` is independent and may land any time.
-
-## Proposed build order
-
-1. `01`, `02`, `05`, `06`, `07` — done (foundation + lineage + tests).
-2. **`05` — Action Lineage** — change-event schema (`Change` gains `id` / `previous_id`)
-   and projection-reducer foundation.
-3. `04` and/or `03` — restore & TUI history, now lineage-capable. Relative order between
-   them is a product-priority call (data recovery vs. browsing) — decide at pick-up.
-   **These are now the next items to pick up after `05`.**
-4. `08` — small independent CLI-output improvement (can be slotted anywhere, incl. now).
-5. Housekeeping: `06` flipped to `completed`; `05` flipped to `completed` this session.
+1. **`09` — engine diff modtime short-circuit bug.** This is the highest-value item: a
+   genuine correctness bug where the `size == && ModTime.Equal` fast path in
+   `internal/store/engine.go` can silently drop an *equal-length* modification written
+   within filesystem timestamp granularity. Fixing it (likely by trusting the hash as the
+   authoritative signal, or only trusting the mtime fast path when the recorded mtime is
+   sufficiently old) is a correctness improvement and should land before further consumers
+   of the change stream are built on top of it. Include the requested reproduction test.
+2. **`08` — CLI snapshot header dominant-action label.** Small, output-only change in
+   `snapshotter.go`. Decides/confirms the parenthetical label precedence for mixed-action
+   snapshots (`(modified)` / `(moved)`, and how `CREATE` / `DELETE` / `IGNORED`-only
+   snapshots read). Independent of `09` and can be slotted in at any point.
