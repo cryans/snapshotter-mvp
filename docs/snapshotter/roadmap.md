@@ -3,7 +3,7 @@
 > Build-order and backlog tracking for `snapshotter`. **No code changes live here**; this
 > file only records issue status and pick-up order.
 >
-> Last updated: 2026-09-04T16:30:00Z
+> Last updated: 2026-09-04T15:50:00Z
 
 ## Backlog status snapshot
 
@@ -18,10 +18,12 @@
 | 07 | End-to-end engine integration tests | `completed` | |
 | 08 | CLI snapshot header dominant-action label | `proposed` | Output-only change; independent |
 | 09 | Engine diff can miss equal-length modifications within timestamp granularity | `proposed` | Real engine correctness bug; independent |
+| 10 | Write README.md with vhs demo GIF | `proposed` | Docs/demo; see `issues/10-…` |
 
 Foundation + lineage + restores + TUI are all landed: **01–07 are done**. The remaining
-backlog is **08** and **09**. Nothing is hard-blocked; both are implementable against the
-current schema and are independent of each other.
+backlog is **08**, **09**, and **10** (README + demo GIF). Nothing is hard-blocked; `08`/`09`
+are implementable against the current schema and independent of each other, and `10` is a
+docs/demo task.
 
 ## Pick-up order for next session
 
@@ -50,8 +52,9 @@ Prioritised by leverage/value for an outside reviewer:
       core idea and the `Physical Disk Walk → Pure Diff → CommitEvent → Append Ledger →
       Projection` data flow; the hand-built Crockford Base32 ULID; move detection by content
       hash; append-only ledger as source of truth; pure-stdlib engine invariant; a
-      TUI screenshot; a quickstart that just works; a small architecture diagram. Keep the
-      docs/ issue workflow mentioned (it is itself a positive signal).
+      TUI screenshot / vhs demo; a quickstart that just works; a small architecture diagram.
+      Keep the docs/ issue workflow mentioned (it is itself a positive signal).
+      Tracked as **issue 10** (`issues/10-write-readme-and-vhs-demo.md`).
 - [ ] **Issue 09 fix** — a "trustworthy snapshot tool" with a known silent-data-loss gap
       undercuts the whole thesis to a reviewer. Land before presenting.
 - [ ] **LICENSE** — public repo with no license reads as all-rights-reserved / an oversight.
