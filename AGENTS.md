@@ -43,6 +43,7 @@ All tool metadata and history live inside a directory named `.snapshots/` at the
 ### Historical Storage Rules
 - **Creates & Modifies**: Actual file contents are saved at `.snapshots/<path>/<timestamp>.<ext>`.
 - **Deletes**: Recorded as an empty marker at `.snapshots/<path>/<timestamp>.<ext>.deleted`.
+- **Ignored** (file still on disk but newly excluded by an ignore rule): Recorded as an empty marker at `.snapshots/<path>/<timestamp>.<ext>.ignored`. Historical snapshots of that path are left untouched; only live tracking stops (issue 06).
 - **Moves**: 
   - At the old location: `.snapshots/<old_path>/<timestamp>.<ext>.moved` (contains the new path text).
   - At the new location: `.snapshots/<new_path>/<timestamp>.<ext>.moved_from` (contains the old path text), accompanied by the copied file contents at `.snapshots/<new_path>/<timestamp>.<ext>`.

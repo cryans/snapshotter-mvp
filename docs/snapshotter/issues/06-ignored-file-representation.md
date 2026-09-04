@@ -2,10 +2,10 @@
 id: "06"
 title: "Represent newly-ignored files as IGNORED, not DELETE"
 module: "snapshotter"
-status: "proposed"
-branch: ""
+status: "in-progress"
+branch: "feature/06-ignored-file-representation"
 created: "2026-09-04T12:27:33Z"
-updated: "2026-09-04T12:27:33Z"
+updated: "2026-09-04T12:50:00Z"
 blocked_by: []
 ---
 
@@ -23,11 +23,11 @@ is simply **no longer tracked** from this point on — surfaced as `IGNORED`
 (rather than `.deleted`).
 
 ## Acceptance Criteria
-- [ ] Introduce a distinct ignore concept (e.g. a new action type such as `IGNORE`/`IGNORED`) emitted by the diff engine when an active path disappears only because an ignore rule now covers it.
-- [ ] The ledger should write an `.ignored` marker (or otherwise distinctly record the transition) instead of a `.deleted` marker for such paths.
-- [ ] Historical snapshots of that path remain intact and unchanged in `.snapshots/`; only the live tracking state changes.
-- [ ] If the ignore rule is later removed, the file should be tracked again (e.g. re-appear as `CREATE`) without corrupting or duplicating history.
-- [ ] State projection reducer handling is updated consistently and covered by tests.
+- [x] Introduce a distinct ignore concept (e.g. a new action type such as `IGNORE`/`IGNORED`) emitted by the diff engine when an active path disappears only because an ignore rule now covers it.
+- [x] The ledger should write an `.ignored` marker (or otherwise distinctly record the transition) instead of a `.deleted` marker for such paths.
+- [x] Historical snapshots of that path remain intact and unchanged in `.snapshots/`; only the live tracking state changes.
+- [x] If the ignore rule is later removed, the file should be tracked again (e.g. re-appear as `CREATE`) without corrupting or duplicating history.
+- [x] State projection reducer handling is updated consistently and covered by tests.
 
 ## Implementation Plan / Notes
 - Discovered while manually testing issue 02 (step 4): adding `.gitignore` patterns caused `DELETE` events for previously-tracked files.

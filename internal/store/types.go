@@ -8,10 +8,11 @@ import (
 type ActionType string
 
 const (
-	ActionCreate ActionType = "CREATE"
-	ActionModify ActionType = "MODIFY"
-	ActionMove   ActionType = "MOVE"
-	ActionDelete ActionType = "DELETE"
+	ActionCreate  ActionType = "CREATE"
+	ActionModify  ActionType = "MODIFY"
+	ActionMove    ActionType = "MOVE"
+	ActionDelete  ActionType = "DELETE"
+	ActionIgnored ActionType = "IGNORED"
 )
 
 // Change represents a single modification to the file system state.
@@ -46,11 +47,19 @@ type Tombstone struct {
 	DeletedAt time.Time `json:"deleted_at"`
 }
 
+// IgnoredEntry records that a file is currently excluded by an ignore rule.
+// Unlike a Tombstone (a real deletion) the content may still exist on disk.
+type IgnoredEntry struct {
+	Path     string    `json:"path"`
+	IgnoredAt time.Time `json:"ignored_at"`
+}
+
 // Projection is the materialized in-memory view of the file system state
 // rebuilt from the append-only ledger.
 type Projection struct {
 	ActiveFiles map[string]FileState
 	Tombstones  map[string]Tombstone
+	Ignored     map[string]IgnoredEntry
 	LastCommit  string
 }
 
@@ -59,5 +68,6 @@ func NewProjection() *Projection {
 	return &Projection{
 		ActiveFiles: make(map[string]FileState),
 		Tombstones:  make(map[string]Tombstone),
+		Ignored:     make(map[string]IgnoredEntry),
 	}
 }

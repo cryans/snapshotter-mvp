@@ -99,6 +99,44 @@ func TestLedger_Append(t *testing.T) {
 	}
 }
 
+func TestLedger_Append_IgnoredMarker(t *testing.T) {
+	workDir := t.TempDir()
+	snapDir := t.TempDir()
+
+	ledger := NewLedger(workDir, snapDir)
+
+	now := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
+	commit := &CommitEvent{
+		ID:        NewCommitID(now),
+		Timestamp: now,
+		Changes: []Change{
+			{Action: ActionIgnored, Path: "secret.log"},
+		},
+	}
+
+	if err := ledger.Append(commit); err != nil {
+		t.Fatalf("Append failed: %v", err)
+	}
+
+	ts := "2026-09-04T10-00-00.000"
+
+	// The ignored transition must produce an .ignored marker, not .deleted.
+	ignoredPath := filepath.Join(snapDir, "secret.log", ts+".log.ignored")
+	if _, err := os.Stat(ignoredPath); err != nil {
+		t.Errorf("expected .ignored marker at %s: %v", ignoredPath, err)
+	}
+
+	// No historical content is written or removed for an ignored file.
+	deletedPath := filepath.Join(snapDir, "secret.log", ts+".log.deleted")
+	if _, err := os.Stat(deletedPath); err == nil {
+		t.Errorf("unexpected .deleted marker: %s", deletedPath)
+	}
+	contentPath := filepath.Join(snapDir, "secret.log", ts+".log")
+	if _, err := os.Stat(contentPath); err == nil {
+		t.Errorf("unexpected content copy written for ignored file: %s", contentPath)
+	}
+}
+
 func TestLedger_Append_Multiple(t *testing.T) {
 	workDir := t.TempDir()
 	snapDir := t.TempDir()

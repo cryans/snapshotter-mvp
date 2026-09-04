@@ -90,15 +90,31 @@ func (e *Engine) diff(dir string) ([]Change, error) {
 
 	var changes []Change
 	
-	// 2. Identify missing active files (potential Deletes or Moves)
+	// 2. Partition active files missing from the disk into two buckets:
+	//    - still present on disk but excluded by an ignore rule -> "ignored"
+	//    - physically absent -> potential move source or true delete
+	ignoredActive := make(map[string]FileState)
 	missingActive := make(map[string]FileState)
 	for path, state := range e.state.ActiveFiles {
-		if _, exists := diskFiles[path]; !exists {
+		if _, exists := diskFiles[path]; exists {
+			continue
+		}
+		// The walker only reports *tracked* regular files, so an active path it no
+		// longer returns either (a) still exists on disk as a regular file but is
+		// now excluded by an ignore rule, or (b) is gone (moved or deleted).
+		// Distinguish them so a newly-ignored file is not conflated with a deletion.
+		phys := filepath.Join(dir, filepath.FromSlash(path))
+		info, err := os.Lstat(phys)
+		if err == nil && info.Mode().IsRegular() {
+			ignoredActive[path] = state
+		} else {
 			missingActive[path] = state
 		}
 	}
 	
-	// Index missing files by hash to quickly find move targets
+	// Index truly-missing files by hash to quickly find move targets. Files that
+	// are merely ignored are excluded here: their content is still at the old
+	// path, so matching an identical new file is a copy/CREATE, not a MOVE.
 	missingByHash := make(map[string]FileState)
 	for _, state := range missingActive {
 		missingByHash[state.Hash] = state
@@ -157,10 +173,19 @@ func (e *Engine) diff(dir string) ([]Change, error) {
 		}
 	}
 
-	// 4. Remaining missing files are true Deletes
+	// 4. Remaining missing (physically absent) files are true Deletes
 	for path := range missingActive {
 		changes = append(changes, Change{
 			Action: ActionDelete,
+			Path:   path,
+		})
+	}
+
+	// 5. Files still on disk but now excluded are recorded as IGNORED. Their
+	// history remains intact; only live tracking stops.
+	for path := range ignoredActive {
+		changes = append(changes, Change{
+			Action: ActionIgnored,
 			Path:   path,
 		})
 	}

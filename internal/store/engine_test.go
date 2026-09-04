@@ -556,6 +556,184 @@ func TestEngine_NestedGitIgnore(t *testing.T) {
 	}
 }
 
+func TestEngine_NewlyIgnoredBecomesIgnored_NotDelete(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	// Track a file.
+	filePath := filepath.Join(workDir, "secret.log")
+	if err := os.WriteFile(filePath, []byte("sensitive"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	first, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if first == nil || len(first.Changes) != 1 || first.Changes[0].Action != ActionCreate {
+		t.Fatalf("Expected a single CREATE for the tracked file, got %+v", first)
+	}
+
+	// Introduce an ignore rule that matches the still-present file.
+	if err := os.WriteFile(filepath.Join(workDir, ".gitignore"), []byte("*.log\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if second == nil {
+		t.Fatalf("Expected changes when an ignore rule is introduced, got nil")
+	}
+
+	actions := map[string]ActionType{}
+	for _, c := range second.Changes {
+		actions[c.Path] = c.Action
+	}
+
+	// The file itself must be reported as IGNORED, never DELETE.
+	if actions["secret.log"] != ActionIgnored {
+		t.Errorf("Expected secret.log to be %s, got %s (changes: %+v)", ActionIgnored, actions["secret.log"], second.Changes)
+	}
+	// The newly-added .gitignore is itself a tracked CREATE.
+	if actions[".gitignore"] != ActionCreate {
+		t.Errorf("Expected .gitignore to be a CREATE, got %s", actions[".gitignore"])
+	}
+	for _, c := range second.Changes {
+		if c.Action == ActionDelete {
+			t.Errorf("A newly-ignored file must not be emitted as DELETE: %+v", c)
+		}
+	}
+
+	// Projection: file no longer active, but recorded as ignored (not a tombstone).
+	state := engine.State()
+	if _, ok := state.ActiveFiles["secret.log"]; ok {
+		t.Errorf("secret.log should no longer be an active file")
+	}
+	if _, ok := state.Ignored["secret.log"]; !ok {
+		t.Errorf("secret.log should be recorded as ignored")
+	}
+	if _, ok := state.Tombstones["secret.log"]; ok {
+		t.Errorf("secret.log should NOT have a tombstone (it was not deleted)")
+	}
+
+	// No .deleted marker should be written; the content history remains.
+	ignoreDir := filepath.Join(ledgerDir, "secret.log")
+	entries, err := os.ReadDir(ignoreDir)
+	if err != nil {
+		t.Fatalf("expected a mirrored dir for secret.log: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".deleted") {
+			t.Errorf("unexpected .deleted marker written for an ignored file: %s", e.Name())
+		}
+	}
+	if len(entries) == 0 {
+		t.Errorf("expected at least the historical snapshot content to remain for secret.log")
+	}
+}
+
+func TestEngine_RemovingIgnoreRuleRetracks(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	filePath := filepath.Join(workDir, "cache.tmp")
+	if err := os.WriteFile(filePath, []byte("cached"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Snapshot(workDir); err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+
+	// Ignore it.
+	if err := os.WriteFile(filepath.Join(workDir, ".gitignore"), []byte("*.tmp\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ign, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if ign == nil {
+		t.Fatalf("Expected ignore transition, got nil")
+	}
+
+	// Remove the ignore rule -> the file should reappear as a CREATE.
+	if err := os.Remove(filepath.Join(workDir, ".gitignore")); err != nil {
+		t.Fatal(err)
+	}
+	third, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if third == nil {
+		t.Fatalf("Expected re-tracking when the ignore rule is removed, got nil")
+	}
+	actions := map[string]ActionType{}
+	for _, c := range third.Changes {
+		actions[c.Path] = c.Action
+	}
+	if actions["cache.tmp"] != ActionCreate {
+		t.Errorf("Expected cache.tmp to reappear as %s, got %s (changes: %+v)", ActionCreate, actions["cache.tmp"], third.Changes)
+	}
+
+	state := engine.State()
+	if _, ok := state.ActiveFiles["cache.tmp"]; !ok {
+		t.Errorf("cache.tmp should be active again after removing the ignore rule")
+	}
+	if _, ok := state.Ignored["cache.tmp"]; ok {
+		t.Errorf("cache.tmp should no longer be in the ignored set after re-tracking")
+	}
+}
+
+func TestEngine_TrueDeleteStillDeletes_WhileOtherIgnored(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+
+	engine := newTestEngine(t, workDir, ledgerDir)
+
+	keep := filepath.Join(workDir, "secret.log")
+	gone := filepath.Join(workDir, "real_delete.txt")
+	if err := os.WriteFile(keep, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(gone, []byte("will vanish"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Snapshot(workDir); err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+
+	// Ignore the log; physically remove the other file.
+	if err := os.WriteFile(filepath.Join(workDir, ".gitignore"), []byte("*.log\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+
+	event, err := engine.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("Snapshot failed: %v", err)
+	}
+	if event == nil {
+		t.Fatalf("Expected changes, got nil")
+	}
+	actions := map[string]ActionType{}
+	for _, c := range event.Changes {
+		actions[c.Path] = c.Action
+	}
+	if actions["secret.log"] != ActionIgnored {
+		t.Errorf("secret.log should be %s, got %s", ActionIgnored, actions["secret.log"])
+	}
+	if actions["real_delete.txt"] != ActionDelete {
+		t.Errorf("real_delete.txt should still be a true %s, got %s", ActionDelete, actions["real_delete.txt"])
+	}
+}
+
 func TestEngine_ForwardSlashPaths(t *testing.T) {
 	// Paths emitted by the engine must always use forward slashes so the ledger
 	// stays platform-independent, even on Windows where os.PathSeparator is '\\'.

@@ -45,6 +45,8 @@ func main() {
 			fmt.Printf("  [~] %s\n", change.Path)
 		case store.ActionDelete:
 			fmt.Printf("  [-] %s\n", change.Path)
+		case store.ActionIgnored:
+			fmt.Printf("  [i] %s\n", change.Path)
 		case store.ActionMove:
 			fmt.Printf("  [>] %s -> %s\n", change.OldPath, change.Path)
 		}

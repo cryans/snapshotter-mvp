@@ -68,6 +68,18 @@ func (l *Ledger) writeMirroredTree(change Change, timestamp string) error {
 		targetFile := filepath.Join(targetDir, timestamp+ext+".deleted")
 		return os.WriteFile(targetFile, nil, 0644)
 
+	case ActionIgnored:
+		// A newly-ignored file stops being tracked but is NOT a deletion. Its
+		// history is left untouched; we only record an `.ignored` marker so the
+		// transition is visible without conflating it with `.deleted`.
+		targetDir := filepath.Join(l.snapshotDir, change.Path)
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			return err
+		}
+		ext := filepath.Ext(change.Path)
+		targetFile := filepath.Join(targetDir, timestamp+ext+".ignored")
+		return os.WriteFile(targetFile, nil, 0644)
+
 	case ActionMove:
 		// 1. Write .moved file in old path
 		oldTargetDir := filepath.Join(l.snapshotDir, change.OldPath)

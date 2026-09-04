@@ -90,6 +90,47 @@ func TestProjection_Apply(t *testing.T) {
 	}
 }
 
+func TestProjection_IgnoredLifecycle(t *testing.T) {
+	proj := NewProjection()
+	now := time.Now()
+
+	// Track a file.
+	proj.Apply(&CommitEvent{
+		ID: "C1", Timestamp: now,
+		Changes: []Change{{Action: ActionCreate, Path: "secret.log", Hash: "abc", Size: 10}},
+	})
+	if _, ok := proj.ActiveFiles["secret.log"]; !ok {
+		t.Fatalf("file should be active after CREATE")
+	}
+
+	// It becomes ignored -> removed from active, added to ignored, no tombstone.
+	proj.Apply(&CommitEvent{
+		ID: "C2", Timestamp: now.Add(time.Minute),
+		Changes: []Change{{Action: ActionIgnored, Path: "secret.log"}},
+	})
+	if _, ok := proj.ActiveFiles["secret.log"]; ok {
+		t.Errorf("ignored file should not be active")
+	}
+	if _, ok := proj.Tombstones["secret.log"]; ok {
+		t.Errorf("ignored file should not create a tombstone")
+	}
+	if _, ok := proj.Ignored["secret.log"]; !ok {
+		t.Errorf("ignored file should be recorded in the ignored set")
+	}
+
+	// Later the rule is removed and the file is tracked again -> CREATE clears ignored.
+	proj.Apply(&CommitEvent{
+		ID: "C3", Timestamp: now.Add(2 * time.Minute),
+		Changes: []Change{{Action: ActionCreate, Path: "secret.log", Hash: "abc", Size: 10}},
+	})
+	if _, ok := proj.ActiveFiles["secret.log"]; !ok {
+		t.Errorf("file should be active again after re-tracking")
+	}
+	if _, ok := proj.Ignored["secret.log"]; ok {
+		t.Errorf("re-tracked file should be removed from the ignored set")
+	}
+}
+
 func TestLoadProjection(t *testing.T) {
 	dir := t.TempDir()
 	eventsPath := filepath.Join(dir, "events.jsonl")

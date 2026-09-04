@@ -23,6 +23,19 @@ func (p *Projection) Apply(commit *CommitEvent) {
 			// If a file is recreated at a path that was previously tombstoned,
 			// we remove the tombstone to reflect its active status.
 			delete(p.Tombstones, change.Path)
+			// A path being tracked again is no longer in an ignored state.
+			delete(p.Ignored, change.Path)
+
+		case ActionIgnored:
+			// The file may still exist on disk but is excluded by an ignore
+			// rule. Stop tracking it, but do NOT treat it as a deletion: no
+			// tombstone, and its historical snapshots stay intact.
+			delete(p.ActiveFiles, change.Path)
+			p.Ignored[change.Path] = IgnoredEntry{
+				Path:      change.Path,
+				IgnoredAt: commit.Timestamp,
+			}
+			delete(p.Tombstones, change.Path)
 
 		case ActionDelete:
 			delete(p.ActiveFiles, change.Path)
