@@ -25,9 +25,21 @@ func main() {
 	}
 
 	// Subcommand dispatch.
-	if len(os.Args) > 1 && os.Args[1] == "restore" {
-		runRestore(engine, os.Args[2:])
-		return
+	//   snapshotter                        -> snapshot the working directory
+	//   snapshotter <filename>             -> open the interactive history viewer
+	//   snapshotter restore <id> <path>    -> restore one file to a commit
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "restore":
+			runRestore(engine, os.Args[2:])
+			return
+		case "-h", "--help", "help":
+			printUsage()
+			return
+		default:
+			runHistory(engine, workDir, os.Args[1:])
+			return
+		}
 	}
 
 	// Trigger a snapshot
@@ -57,6 +69,14 @@ func main() {
 			fmt.Printf("  [>] %s -> %s\n", change.OldPath, change.Path)
 		}
 	}
+}
+
+// printUsage writes a short usage summary to standard error.
+func printUsage() {
+	fmt.Fprintln(os.Stderr, "usage: snapshotter [<filename> | restore <commit-id> <path> | help]")
+	fmt.Fprintln(os.Stderr, "  (no argument)               snapshot the current working directory")
+	fmt.Fprintln(os.Stderr, "  <filename>                  open the interactive history viewer for a file")
+	fmt.Fprintln(os.Stderr, "  restore <commit-id> <path>  restore a single file to its state at a commit")
 }
 
 // runRestore implements `snapshotter restore <commit-id> <path>`: it resets a

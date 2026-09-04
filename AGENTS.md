@@ -12,7 +12,11 @@ Never run `git add`, `git commit`, or `git push` unless the user has explicitly 
 Prefer the provided `Makefile` over invoking Go directly for common tasks. Use `make build`, `make run`, and `make test` (and `make clean`) whenever they fit; fall back to raw `go`/`go test` only when a task is not covered by a target.
 
 ## Project Purpose
-`snapshotter` is a local-first, deterministic file snapshotting engine designed to run almost entirely in user-space. Code is standard-library Go only (Go 1.23+) with **one documented dependency exception**: `github.com/sabhiram/go-gitignore`, used to parse `.gitignore` patterns in `internal/store/walker.go`. Keep any further dependencies out.
+`snapshotter` is a local-first, deterministic file snapshotting engine designed to run almost entirely in user-space. The engine code in `internal/store` is standard-library Go only, with **one documented dependency exception**: `github.com/sabhiram/go-gitignore`, used to parse `.gitignore` patterns in `internal/store/walker.go`. Keep any further dependencies out of the engine.
+
+The **interactive history TUI** (root `main` package, `history_tui.go`) is the repo's second documented dependency exception: `github.com/charmbracelet/bubbletea` (with its `lipgloss` companion) drives the terminal UI that `snapshotter <filename>` launches. This UI code deliberately sits outside `internal/store`, so the engine's pure-stdlib invariant is preserved.
+
+The module's `go` directive is 1.24 (raised from 1.23 by bubbletea's transitive `golang.org/x/sys`, which requires Go >= 1.24); the stated floor remains "Go 1.23+" and the toolchain must be at least 1.24 to build with the TUI.
 
 Instead of daemon-based file-system watching (e.g., `fsnotify`), it relies on a clean, unidirectional data flow:
 `Physical Disk Walk -> Pure Diff Engine -> CommitEvent -> Append Ledger & Blobs -> Update Projection`

@@ -37,3 +37,11 @@ When a user targets a file with `snapshotter <filename>`, launch an interactive 
 - This is an **ordering/priority** relationship, *not* a hard dependency: the
   chronological `(current)`/`(deleted)`/`(moved)` view described here is implementable today
   from commit ULIDs, timestamps and the `.moved` path markers.
+
+## Enter interaction (clarified)
+`Enter` is overloaded by row type (see `docs/snapshotter/spec.md` for the authoritative
+behaviour). The original AC below only described Enter on a `(moved)` row following the move;
+on implementation we extended it so that Enter on a historical content version **restores**
+that version under the currently displayed file name (backing up divergent content) and then
+**auto-snapshots**, recording a new history entry. Enter on the `(current)` row and on
+`(deleted)`/`(ignored)` rows is a no-op. This was refined interactively during issue 03.
