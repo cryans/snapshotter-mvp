@@ -2,10 +2,10 @@
 id: "11"
 title: "Project licensing, CI build gate, and gofmt sweep"
 module: "snapshotter"
-status: "proposed"
-branch: ""
+status: "completed"
+branch: "feature/11-license-ci-and-gofmt-sweep"
 created: "2026-09-07T11:57:51Z"
-updated: "2026-09-07T11:57:51Z"
+updated: "2026-09-07T13:45:00Z"
 blocked_by: []
 ---
 
@@ -31,14 +31,25 @@ nits. None change runtime behaviour.
 
 ## Acceptance Criteria
 
-- [ ] A `LICENSE` file (MIT) exists at the repo root.
-- [ ] Makefile has `fmt` / `vet` / `tidy` targets (consistent with existing `build` / `run` / `test` / `clean`).
-- [ ] A CI workflow runs `go vet` + a `gofmt` check + `go test` and must pass on PRs/pushes.
-- [ ] `internal/store/*.go` and their tests are `gofmt`-clean (no diffs from `gofmt -l`).
-- [ ] No runtime behaviour changes (pure formatting / tooling / docs-of-record).
+- [x] A `LICENSE` file (MIT) exists at the repo root.
+- [x] Makefile has `fmt` / `vet` / `tidy` targets (consistent with existing `build` / `run` / `test` / `clean`).
+- [x] A CI workflow runs `go vet` + a `gofmt` check + `go test` and must pass on PRs/pushes.
+- [x] `internal/store/*.go` and their tests are `gofmt`-clean (no diffs from `gofmt -l`).
+- [x] No runtime behaviour changes (pure formatting / tooling / docs-of-record).
 
 ## Implementation Plan / Notes
 
 - Rooted in the MVP-readiness checklist in `docs/snapshotter/roadmap.md` (LICENSE, CI +
   Makefile `fmt`/`vet`/`tidy`, and `gofmt` sweep items). Git hooks deliberately excluded.
 - No interaction with the engine's pure-stdlib invariant or the TUI dependency exception.
+
+## Resolution / Delivery
+
+- Landed on `main` via merge of PR #1 (`08a145f`); implementation commit `6fa3cc9`.
+- Added MIT `LICENSE` (`Copyright (c) 2026 Stephen Cryan`).
+- Added Makefile `fmt` / `fmt-check` / `vet` / `tidy` / `cover` / `cover-report` / `check`
+  targets; `check` = `fmt-check vet test` as the local analogue of the CI gate.
+- Added `.github/workflows/ci.yml` running `make fmt-check`, `make vet`, and `make test`,
+  plus a coverage profile uploaded on push/PR and an HTML coverage report on
+  default-branch pushes.
+- Ran the `gofmt` sweep; `gofmt -l` over tracked `*.go` is now clean.

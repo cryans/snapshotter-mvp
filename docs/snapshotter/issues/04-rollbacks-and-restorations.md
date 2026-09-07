@@ -15,10 +15,10 @@ blocked_by: []
 Implement a mechanism to restore files to their exact state from a historical commit ID, using either the authoritative ledger metadata or by copying the stored blobs back out of the mirrored tree.
 
 ## Acceptance Criteria
-- [ ] Implement `Restore(commitID string, targetPath string)` in the core engine.
-- [ ] Create a `snapshotter restore <commit-id> [path]` CLI command.
-- [ ] Safely write files back to the working directory, ensuring we do not overwrite untracked files without warning.
-- [ ] Add rigorous unit tests simulating full restorations of deleted and modified files.
+- [x] Implement `Restore(commitID string, targetPath string)` in the core engine (`internal/store/restore.go`).
+- [x] Create a `snapshotter restore <commit-id> <path>` CLI command.
+- [x] Safely write files back to the working directory without clobbering: divergent current content is preserved under `.snapshots/.internal/conflicts/<run-ts>/<path>`, and a no-op restore is skipped.
+- [x] Add rigorous unit + integration tests simulating full restorations of deleted and modified files (`restore_test.go`, `restore_integration_test.go`).
 
 ## Ordering & Rationale (roadmap)
 - **Sequencing:** land `05` (Action Lineage) before this issue. Restore resolution consumes

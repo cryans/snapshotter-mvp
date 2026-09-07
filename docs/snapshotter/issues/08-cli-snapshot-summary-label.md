@@ -1,6 +1,6 @@
 ---
 id: "08"
-title: "CLI snapshot summary should surface the dominant action kind"
+title: "CLI snapshot output should annotate each change line with a worded action label"
 module: "snapshotter"
 status: "completed"
 branch: ""
@@ -9,7 +9,7 @@ updated: "2026-09-07T11:49:00Z"
 blocked_by: []
 ---
 
-# Issue 08: CLI snapshot summary should surface the dominant action kind
+# Issue 08: CLI snapshot output should annotate each change line with a worded action label
 
 > **Scoping note (2026-09-07):** This issue was delivered as per-change worded
 > action labels on the snapshot output lines (`[~] (modified) path`, etc.), landed
