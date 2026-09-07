@@ -1,4 +1,4 @@
-.PHONY: build run test clean fmt fmt-check vet tidy cover check
+.PHONY: build run test clean fmt fmt-check vet tidy cover cover-report check
 
 build:
 	go build -o bin/snapshotter .
@@ -32,10 +32,15 @@ vet:
 tidy:
 	go mod tidy
 
-# Code coverage profile + per-function report (CI uploads coverage.out).
+# Code coverage profile + per-function text report (CI uploads coverage.out).
 cover:
 	go test -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out
+
+# Visual, color-coded HTML report (per-file and per-line view). Requires the
+# coverage.out produced by `make cover`. CI uploads coverage.html as an artifact.
+cover-report:
+	go tool cover -html=coverage.out -o coverage.html
 
 # Local analogue of the CI gate.
 check: fmt-check vet test
