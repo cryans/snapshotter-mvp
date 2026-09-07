@@ -3,6 +3,7 @@ package store
 import (
 	"bufio"
 	"encoding/json"
+	"io"
 	"os"
 )
 
@@ -97,8 +98,7 @@ func LoadProjection(eventsPath string) (*Projection, error) {
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	// Optionally increase scanner buffer if single events get larger than 64kb
+	scanner := ledgerScanner(f)
 	for scanner.Scan() {
 		var commit CommitEvent
 		if err := json.Unmarshal(scanner.Bytes(), &commit); err != nil {
@@ -112,4 +112,20 @@ func LoadProjection(eventsPath string) (*Projection, error) {
 	}
 
 	return proj, nil
+}
+
+// maxLedgerLine caps how large a single JSONL event may grow before the ledger
+// is treated as unusable. Each line holds one snapshot commit with all of its
+// Change records (path, hash, size, mtime, ids) but never file contents, so a
+// full-tree first-run snapshot of a large project can legitimately exceed bufio's
+// 64 KiB default scan limit. 256 MiB is far beyond any realistic metadata-only
+// commit while still bounding memory on a single pathological line.
+const maxLedgerLine = 256 << 20 // 256 MiB
+
+// ledgerScanner returns a bufio.Scanner preconfigured to accept JSONL commit
+// lines far larger than bufio's 64 KiB default maximum token size.
+func ledgerScanner(r io.Reader) *bufio.Scanner {
+	s := bufio.NewScanner(r)
+	s.Buffer(make([]byte, 64*1024), maxLedgerLine)
+	return s
 }

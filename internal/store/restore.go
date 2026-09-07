@@ -1,7 +1,6 @@
 package store
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -131,7 +130,7 @@ func (e *Engine) replayUntilCommit(commitID string) (*Projection, map[string]str
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
+	scanner := ledgerScanner(f)
 	for scanner.Scan() {
 		var commit CommitEvent
 		if err := json.Unmarshal(scanner.Bytes(), &commit); err != nil {
