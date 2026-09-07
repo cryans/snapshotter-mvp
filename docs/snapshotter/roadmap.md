@@ -7,7 +7,7 @@
 > Decisions**) rather than here, so the roadmap stays about build order. Latest:
 > DD-01 — a file copy is a CREATE, not a COPY (git-mirroring).
 >
-> Last updated: 2026-09-07T11:06:00Z
+> Last updated: 2026-09-07T11:49:00Z
 
 ## Backlog status snapshot
 
@@ -20,23 +20,19 @@
 | 05 | Action Lineage & Unique Identifiers | `completed` | Implemented — lineage schema + reducer + tests |
 | 06 | Represent newly-ignored files as IGNORED, not DELETE | `completed` | Code already merged to `main`, all ACs `[x]` |
 | 07 | End-to-end engine integration tests | `completed` | |
-| 08 | CLI snapshot header dominant-action label | `proposed` | Output-only change; independent |
+| 08 | CLI snapshot summary surfaces the dominant action kind | `completed` | Re-scoped to per-line worded action labels; landed `5922163` |
 | 09 | Engine diff can miss equal-length modifications within timestamp granularity | `completed` | DD-02 grace-period fast path; tests added |
 | 10 | Write README.md with vhs demo GIF | `proposed` | Docs/demo; see `issues/10-…` |
 
-Foundation + lineage + restores + TUI are all landed: **01–07 are done**, and **09** is
-now implemented too (DD-02). The remaining backlog is **08** and **10** (README + demo
-GIF). Nothing is hard-blocked; `08` is implementable against the current schema and `10`
-is a docs/demo task.
+Foundation + lineage + restores + TUI are all landed: **01–07 are done**, **09** is
+implemented too (DD-02), and **08** shipped as per-line worded action labels at
+`5922163`. The only remaining backlog item is **10** (README + demo GIF). Nothing is
+hard-blocked; `10` is a docs/demo task.
 
 ## Pick-up order for next session
 
-1. **`08` — CLI snapshot header dominant-action label.** Small, output-only change in
-   `snapshotter.go`. Decides/confirms the parenthetical label precedence for mixed-action
-   snapshots (`(modified)` / `(moved)`, and how `CREATE` / `DELETE` / `IGNORED`-only
-   snapshots read). Independent of `09` and can be slotted in at any point.
-2. **`10` — README with vhs demo GIF.** Highest-leverage polish; see
-   `issues/10-write-readme-and-vhs-demo.md`.
+1. **`10` — README with vhs demo GIF.** Only remaining backlog item. Highest-leverage
+   polish; see `issues/10-write-readme-and-vhs-demo.md`.
 
 ## MVP-readiness checklist
 
@@ -61,7 +57,8 @@ Prioritised by leverage/value for an outside reviewer:
 - [ ] **CI build + Makefile `fmt`/`vet`/`tidy`** — green `go vet` + `gofmt` check + `go test`
       signals "maintained". Git hooks were considered but deferred in favour of CI (hooks
       don't ship through version control and duplicate a CI gate).
-- [ ] **Issue 08 fix** — cheap polish to close the feature set.
+- [x] **Issue 08 fix** — landed as per-line worded action labels (`5922163`); re-scoped
+      from the header-label idea to the delivered output change.
 - [ ] **`gofmt` sweep of `internal/store/*.go`** — trailing-whitespace / alignment nits
       (`id.go`, `state.go`, `types.go`, `ledger.go` and their tests, `engine_test.go`).
 - [ ] Decide whether **enhanced logging** is worth it for trust (a tool whose job is "you can
