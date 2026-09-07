@@ -10,6 +10,17 @@ import (
 	"time"
 )
 
+// modTimeGrace is how old a tracked file's recorded modification time must be
+// before the size+modtime match is trusted to mean "unchanged". Filesystem
+// timestamps are often truncated to a coarse quantum (e.g. 1s on FAT, some
+// network shares, and copy/archive tools that stamp mtimes), so a *recent*
+// equal-length write can leave the on-disk mtime equal to the recorded one even
+// though the bytes changed. Only once the recorded mtime is at least one quantum
+// in the past is an identical mtime reliable evidence that no re-write has
+// occurred. Files written within this window are therefore re-hashed so the
+// change is not silently dropped. See issue 09.
+const modTimeGrace = time.Second
+
 // Engine orchestrates the snapshot process by integrating the ledger, state, and diff logic.
 type Engine struct {
 	workDir     string
@@ -49,8 +60,12 @@ func (e *Engine) State() *Projection {
 
 // Snapshot scans the directory, diffs against the projection, appends a commit, and updates state.
 func (e *Engine) Snapshot(dir string) (*CommitEvent, error) {
-	now := time.Now().UTC()
+	return e.snapshotAt(dir, time.Now().UTC())
+}
 
+// snapshotAt is Snapshot with an explicit commit time, so tests can drive the
+// diff deterministically instead of depending on the wall clock.
+func (e *Engine) snapshotAt(dir string, now time.Time) (*CommitEvent, error) {
 	changes, err := e.diff(dir, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute diff: %w", err)
@@ -132,8 +147,15 @@ func (e *Engine) diff(dir string, now time.Time) ([]Change, error) {
 	for relPath, df := range diskFiles {
 		state, exists := e.state.ActiveFiles[relPath]
 
-		// Optimization: if size and modtime exactly match, skip hashing
-		if exists && state.Size == df.info.Size() && state.ModTime.Equal(df.info.ModTime()) {
+		// Fast path for an unchanged file: size and modtime both match the
+		// record. This is only trustworthy once the recorded mtime is old enough
+		// that a re-write within the filesystem's timestamp granularity could no
+		// longer be masked by an equal mtime (see modTimeGrace). A recent
+		// equal-length write must fall through to hashing or the modification is
+		// silently dropped.
+		if exists && state.Size == df.info.Size() &&
+			state.ModTime.Equal(df.info.ModTime()) &&
+			now.Sub(state.ModTime) >= modTimeGrace {
 			continue
 		}
 

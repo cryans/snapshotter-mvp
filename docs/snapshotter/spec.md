@@ -61,6 +61,40 @@ a still-live file's hash as a "possible copy of `<src>`" — presentation only, 
 schema/ledger/reducer change, and no branching lineage. Do not add an `ActionCopy`
 to the engine unless a concrete need for persisting copy identity appears.
 
+### DD-02: The "unchanged" fast path is gated on the recorded mtime's age (2026-09-07)
+
+**Context.** Issue 09: `Engine.diff` skipped re-hashing an already-tracked file when
+its recorded `size` and `mod_time` both matched the file on disk. That short-circuit
+silently dropped a genuine `MODIFY` when a file was rewritten at *equal length* and the
+second write's mtime fell within the filesystem's timestamp granularity of the recorded
+one (so `ModTime.Equal` reported them equal).
+
+**Decision.** Keep size+modtime as the fast-path signal, but only trust it once the
+recorded `mod_time` is **older than a grace period** relative to the snapshot time. A
+tracked file whose size and modtime match the record is skipped only when
+`now - recorded mod_time >= modTimeGrace` (`modTimeGrace = 1s`, a named constant in
+`internal/store/engine.go`); otherwise the file is re-hashed. Files written within the
+last grace second are re-hashed so an equal-length recent write cannot be masked by an
+equal mtime; stable/cold files keep the fast path.
+
+**Rationale / tradeoffs.**
+- **Correctness model.** Filesystems update mtime on every write, truncating only within
+  one timestamp quantum. So once the recorded mtime is ≥ one quantum in the past, an
+  identical on-disk mtime is trustworthy evidence that no re-write has occurred; an
+  equal-length write within that window could still be masked, hence the fall-through.
+  The heuristic does **not** defeat deliberate mtime-stamping by copy/archive tools that
+  force an old mtime onto new equal-length content — no stat-based snapshotter can without
+  hashing.
+- **Fast path preserved (AC2).** Re-hashing is confined to files touched within the last
+  ~1s. It does not regress into re-hashing every file on every snapshot, unlike the
+  always-hash alternative.
+- **Why not always-hash.** The "always hash tracked same-size files" option is maximally
+  tamper-resistant but rehashes every unchanged file each snapshot — explicitly rejected
+  by issue 09 AC2.
+- **Fixed grace, not per-filesystem.** A single 1s grace covers typical coarse granularity
+  (FAT, many network shares) without plumbing per-filesystem resolution. Bumped via the
+  `modTimeGrace` constant if ever needed.
+
 ## Interactive File History Viewer (issue 03)
 
 `snapshotter <filename>` opens a small interactive terminal viewer showing that

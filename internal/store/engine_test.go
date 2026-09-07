@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type SnapshotEngine interface {
@@ -75,7 +76,7 @@ func TestEngine_Create(t *testing.T) {
 	if !ok {
 		t.Fatalf("Expected 'hello.txt' in active files")
 	}
-	
+
 	expectedHash := hashFile(t, filePath)
 	if fileState.Hash != expectedHash {
 		t.Errorf("Expected hash %s, got %s", expectedHash, fileState.Hash)
@@ -90,7 +91,7 @@ func TestEngine_Update(t *testing.T) {
 
 	filePath := filepath.Join(workDir, "data.txt")
 	os.WriteFile(filePath, []byte("v1"), 0644)
-	
+
 	engine.Snapshot(workDir)
 
 	os.WriteFile(filePath, []byte("v2_updated"), 0644)
@@ -163,7 +164,7 @@ func TestEngine_Move(t *testing.T) {
 	oldPath := filepath.Join(workDir, "old.txt")
 	newPath := filepath.Join(workDir, "new.txt")
 	content := []byte("move me")
-	
+
 	os.WriteFile(oldPath, content, 0644)
 	engine.Snapshot(workDir)
 
@@ -210,7 +211,7 @@ func TestEngine_Subdirectories(t *testing.T) {
 	if err := os.MkdirAll(subDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	filePath := filepath.Join(subDir, "arch.md")
 	os.WriteFile(filePath, []byte("architecture v1"), 0644)
 
@@ -229,7 +230,7 @@ func TestEngine_Subdirectories(t *testing.T) {
 	if change.Action != ActionCreate {
 		t.Errorf("Expected action %s, got %s", ActionCreate, change.Action)
 	}
-	
+
 	expectedRel := filepath.ToSlash(filepath.Join("docs", "specs", "arch.md"))
 	if filepath.ToSlash(change.Path) != expectedRel {
 		t.Errorf("Expected path %q, got %q", expectedRel, change.Path)
@@ -260,7 +261,7 @@ func TestEngine_Subdirectories(t *testing.T) {
 
 	expectedOld := expectedRel
 	expectedNew := filepath.ToSlash(filepath.Join("archive", "arch.md"))
-	
+
 	if filepath.ToSlash(change2.OldPath) != expectedOld {
 		t.Errorf("Expected OldPath %q, got %q", expectedOld, change2.OldPath)
 	}
@@ -964,3 +965,174 @@ func TestEngine_Lineage_IgnoredTransition(t *testing.T) {
 	}
 }
 
+// TestEngine_EqualLengthSameMtime_Recent_Detected reproduces issue 09: a
+// tracked file whose bytes change at equal length, with the filesystem reporting
+// the *same* modtime (coarse timestamp granularity), must still be reported as a
+// MODIFY when the two writes fall inside the fast-path grace window. Before the
+// fix, the size+modtime fast path silently dropped such a change.
+//
+// The snapshot times are injected via snapshotAt so the test is deterministic:
+// it does not depend on how fast the host runs between the two writes.
+func TestEngine_EqualLengthSameMtime_Recent_Detected(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+	e, err := NewEngine(workDir, ledgerDir)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+
+	filePath := filepath.Join(workDir, "data.bin")
+	v1 := []byte("AAAA") // len 4
+	v2 := []byte("BBBB") // len 4 (equal length, different bytes)
+	if len(v1) != len(v2) {
+		t.Fatal("test bodies must be equal length")
+	}
+
+	// Pin a shared modtime that is comfortably in the past, simulating a coarse
+	// filesystem that truncates both writes to the same timestamp quantum.
+	t0 := time.Now().UTC().Add(-time.Hour)
+	// Second snapshot happens just after the first write's recorded mtime,
+	// inside the 1s modTimeGrace window — the case the old fast path dropped.
+	tSecond := t0.Add(200 * time.Millisecond)
+
+	if err := os.WriteFile(filePath, v1, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filePath, t0, t0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.snapshotAt(workDir, t0); err != nil {
+		t.Fatalf("first snapshot: %v", err)
+	}
+
+	// Overwrite with same-length content but keep the identical modtime.
+	if err := os.WriteFile(filePath, v2, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filePath, t0, t0); err != nil {
+		t.Fatal(err)
+	}
+
+	event, err := e.snapshotAt(workDir, tSecond)
+	if err != nil {
+		t.Fatalf("second snapshot: %v", err)
+	}
+	if event == nil {
+		t.Fatal("equal-length, same-modtime modification was silently dropped (issue 09)")
+	}
+	mods := 0
+	for _, c := range event.Changes {
+		if c.Action == ActionModify && c.Path == "data.bin" {
+			mods++
+		}
+	}
+	if mods != 1 {
+		t.Fatalf("expected a single MODIFY for data.bin, got %+v", event.Changes)
+	}
+	if got, want := e.State().ActiveFiles["data.bin"].Hash, hashFile(t, filePath); got != want {
+		t.Errorf("tracked hash did not advance to the new body: got %s want %s", got, want)
+	}
+}
+
+// TestEngine_EqualLengthSameMtime_PublicAPI is an end-to-end reproduction of
+// issue 09 through the public Snapshot entry point (real wall clock). Two
+// equal-length bodies written in rapid succession with a pinned identical mtime
+// must still be distinguished by hashing.
+func TestEngine_EqualLengthSameMtime_PublicAPI(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+	e, err := NewEngine(workDir, ledgerDir)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+
+	filePath := filepath.Join(workDir, "data.bin")
+	v1 := []byte("v1xx")
+	v2 := []byte("v2yy") // same length, different bytes
+	if len(v1) != len(v2) {
+		t.Fatal("test bodies must be equal length")
+	}
+
+	if err := os.WriteFile(filePath, v1, 0644); err != nil {
+		t.Fatal(err)
+	}
+	first, err := e.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("first snapshot: %v", err)
+	}
+	if first == nil {
+		t.Fatal("expected a CREATE on first snapshot")
+	}
+
+	// Write the new equal-length body and force the recorded modtime back so the
+	// filesystem would report the same mtime as the first write.
+	recorded := first.Changes[0].ModTime
+	if err := os.WriteFile(filePath, v2, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filePath, recorded, recorded); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := e.Snapshot(workDir)
+	if err != nil {
+		t.Fatalf("second snapshot: %v", err)
+	}
+	if second == nil {
+		t.Fatal("equal-length, same-modtime modification was silently dropped through the public API (issue 09)")
+	}
+	var sawModify bool
+	for _, c := range second.Changes {
+		if c.Action == ActionModify && c.Path == "data.bin" {
+			sawModify = true
+		}
+	}
+	if !sawModify {
+		t.Fatalf("expected a MODIFY for data.bin, got %+v", second.Changes)
+	}
+
+	// Re-open the engine from the persisted ledger: the modified content must be
+	// the new active state, proving the change was committed, not just noticed.
+	reopened, err := NewEngine(workDir, ledgerDir)
+	if err != nil {
+		t.Fatalf("reopen engine: %v", err)
+	}
+	if got, want := reopened.State().ActiveFiles["data.bin"].Hash, hashFile(t, filePath); got != want {
+		t.Errorf("after reload the active hash should be the new body: got %s want %s", got, want)
+	}
+}
+
+// TestEngine_UnchangedColdFile_FastPathStillSkips guards AC2: once a tracked
+// file's recorded mtime is older than the grace window, an unchanged file must
+// still short-circuit (no spurious change emitted) rather than being re-hashed
+// and re-reported on every snapshot.
+func TestEngine_UnchangedColdFile_FastPathStillSkips(t *testing.T) {
+	workDir := t.TempDir()
+	ledgerDir := t.TempDir()
+	e, err := NewEngine(workDir, ledgerDir)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+
+	filePath := filepath.Join(workDir, "stable.txt")
+	if err := os.WriteFile(filePath, []byte("stable content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Now().UTC().Add(-time.Hour)
+	if err := os.Chtimes(filePath, t0, t0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.snapshotAt(workDir, t0); err != nil {
+		t.Fatalf("first snapshot: %v", err)
+	}
+
+	// Far beyond the grace window, an unchanged cold file must produce no change.
+	tLater := t0.Add(10 * time.Second)
+	event, err := e.snapshotAt(workDir, tLater)
+	if err != nil {
+		t.Fatalf("second snapshot: %v", err)
+	}
+	if event != nil {
+		t.Fatalf("unchanged cold file should be skipped by the fast path, got %+v", event.Changes)
+	}
+}
