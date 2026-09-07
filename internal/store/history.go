@@ -1,7 +1,6 @@
 package store
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -126,7 +125,7 @@ func (e *Engine) FileHistory(arg string) (*FileHistory, error) {
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
+	scanner := ledgerScanner(f)
 	for scanner.Scan() {
 		var commit CommitEvent
 		if err := json.Unmarshal(scanner.Bytes(), &commit); err != nil {
