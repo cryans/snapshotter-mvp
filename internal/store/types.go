@@ -64,7 +64,7 @@ type Tombstone struct {
 // IgnoredEntry records that a file is currently excluded by an ignore rule.
 // Unlike a Tombstone (a real deletion) the content may still exist on disk.
 type IgnoredEntry struct {
-	Path     string    `json:"path"`
+	Path      string    `json:"path"`
 	IgnoredAt time.Time `json:"ignored_at"`
 }
 

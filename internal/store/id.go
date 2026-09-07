@@ -31,7 +31,7 @@ func NewCommitID(t time.Time) string {
 
 	// Encode to 26-character Crockford Base32
 	var dst [26]byte
-	
+
 	// 10 byte timestamp
 	dst[0] = encoding[(id[0]&224)>>5]
 	dst[1] = encoding[id[0]&31]

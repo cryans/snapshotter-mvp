@@ -3,3 +3,4 @@
 .gocache/
 .gomodcache/
 bin/
+coverage.out

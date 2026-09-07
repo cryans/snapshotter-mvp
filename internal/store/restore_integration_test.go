@@ -206,6 +206,50 @@ func TestIntegration_RestoreIsSingleTarget(t *testing.T) {
 	}
 }
 
+// --- Scenario: restoring a file whose content history runs through a MOVE ------
+
+// TestIntegration_RestoreMovedFile reverts a file to the content it carried
+// *at the move commit*, exercising replayUntilCommit's ActionMove branch: the
+// source path's recorded write timestamp is dropped and content is attributed to
+// the destination path from that commit forward. Without that branch mapping the
+// blob to the new path, the restore would not find the moved file's content.
+func TestIntegration_RestoreMovedFile(t *testing.T) {
+	e, root := newIntegrationEngine(t)
+
+	writeRel(t, root, "orig.txt", "v1")
+	if _, created := snapshotActions(t, e, root); created == nil {
+		t.Fatal("expected an initial CREATE commit")
+	}
+
+	settle()
+	renameRel(t, root, "orig.txt", "moved.txt")
+	_, move := snapshotActions(t, e, root)
+	if move == nil {
+		t.Fatal("expected a MOVE commit")
+	}
+
+	settle()
+	writeRel(t, root, "moved.txt", "v2 divergent")
+	if _, modEv := snapshotActions(t, e, root); modEv == nil {
+		t.Fatal("expected a MODIFY commit")
+	}
+
+	// Revert moved.txt to the bytes it carried at the move commit.
+	res, err := e.Restore(move.ID, "moved.txt")
+	if err != nil {
+		t.Fatalf("restore through a move failed: %v", err)
+	}
+	if !res.Restored {
+		t.Fatal("expected moved.txt to be rewritten on restore")
+	}
+	if got := readWorkFile(t, root, "moved.txt"); got != "v1" {
+		t.Errorf("restored content = %q, want %q", got, "v1")
+	}
+	if content, _, ok := readFirstBackup(t, root, "moved.txt"); !ok || content != "v2 divergent" {
+		t.Errorf("expected divergent content backed up, got content=%q ok=%v", content, ok)
+	}
+}
+
 // --- Scenario: errors for an unknown commit and a path absent at that commit --
 
 func TestIntegration_RestoreErrors(t *testing.T) {

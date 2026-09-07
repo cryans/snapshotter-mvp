@@ -25,7 +25,7 @@ func TestNewCommitID_LengthAndCharset(t *testing.T) {
 func TestNewCommitID_Ordering(t *testing.T) {
 	t1 := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
 	t2 := t1.Add(1 * time.Second)
-	
+
 	id1 := NewCommitID(t1)
 	id2 := NewCommitID(t2)
 
