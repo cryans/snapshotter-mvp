@@ -2,10 +2,10 @@
 id: "09"
 title: "Engine diff can miss equal-length modifications within filesystem timestamp granularity"
 module: "snapshotter"
-status: "proposed"
-branch: ""
+status: "completed"
+branch: "feature/09-engine-diff-modtime-short-circuit"
 created: "2026-09-04T14:13:43Z"
-updated: "2026-09-04T14:13:43Z"
+updated: "2026-09-07T11:06:00Z"
 blocked_by: []
 ---
 
@@ -42,13 +42,31 @@ shares / copy tools that stamp mtimes) makes the mtime half of the check unrelia
 *recently* written files. `mod_time` equality is also not proof of byte-identity.
 
 ## Acceptance Criteria
-- [ ] The diff produces a `MODIFY` change for an already-tracked file whose content
+- [x] The diff produces a `MODIFY` change for an already-tracked file whose content
       changes but whose byte length is unchanged, regardless of how close in time the two
       writes are.
-- [ ] Unchanged files are still skipped (the fast path must not regress into re-hashing
+- [x] Unchanged files are still skipped (the fast path must not regress into re-hashing
       every file on every snapshot).
-- [ ] The change is covered by a test that reproduces an equal-length, same-timestamp
+- [x] The change is covered by a test that reproduces an equal-length, same-timestamp
       modification.
+
+## Resolution
+
+Adopted the **grace-period fast path** (see **DD-02** in `spec.md`): the size+modtime
+short-circuit in `internal/store/engine.go` is only trusted once the recorded `mod_time`
+is at least `modTimeGrace` (1s) old relative to the snapshot time. Files written within
+the grace window fall through to hashing, so an equal-length write that the filesystem
+reports with the same mtime is detected. `Snapshot` was split into an internal
+`snapshotAt(dir, now)` so tests drive the snapshot time deterministically instead of
+relying on the wall clock.
+
+Tests added in `internal/store/engine_test.go`:
+- `TestEngine_EqualLengthSameMtime_Recent_Detected` — deterministic (injected `now`)
+  reproduction; verified to fail against the pre-fix fast path.
+- `TestEngine_EqualLengthSameMtime_PublicAPI` — end-to-end through `Snapshot()`, including
+  a fresh-engine reload from the ledger.
+- `TestEngine_UnchangedColdFile_FastPathStillSkips` — unchanged cold file still
+  short-circuits (AC2 guard).
 
 ## Implementation Plan / Notes
 - The `mod_time` equal + `size` equal fast path is fundamentally unsafe as the sole signal

@@ -7,7 +7,7 @@
 > Decisions**) rather than here, so the roadmap stays about build order. Latest:
 > DD-01 — a file copy is a CREATE, not a COPY (git-mirroring).
 >
-> Last updated: 2026-09-07T10:37:18Z
+> Last updated: 2026-09-07T11:06:00Z
 
 ## Backlog status snapshot
 
@@ -21,27 +21,22 @@
 | 06 | Represent newly-ignored files as IGNORED, not DELETE | `completed` | Code already merged to `main`, all ACs `[x]` |
 | 07 | End-to-end engine integration tests | `completed` | |
 | 08 | CLI snapshot header dominant-action label | `proposed` | Output-only change; independent |
-| 09 | Engine diff can miss equal-length modifications within timestamp granularity | `proposed` | Real engine correctness bug; independent |
+| 09 | Engine diff can miss equal-length modifications within timestamp granularity | `completed` | DD-02 grace-period fast path; tests added |
 | 10 | Write README.md with vhs demo GIF | `proposed` | Docs/demo; see `issues/10-…` |
 
-Foundation + lineage + restores + TUI are all landed: **01–07 are done**. The remaining
-backlog is **08**, **09**, and **10** (README + demo GIF). Nothing is hard-blocked; `08`/`09`
-are implementable against the current schema and independent of each other, and `10` is a
-docs/demo task.
+Foundation + lineage + restores + TUI are all landed: **01–07 are done**, and **09** is
+now implemented too (DD-02). The remaining backlog is **08** and **10** (README + demo
+GIF). Nothing is hard-blocked; `08` is implementable against the current schema and `10`
+is a docs/demo task.
 
 ## Pick-up order for next session
 
-1. **`09` — engine diff modtime short-circuit bug.** This is the highest-value item: a
-   genuine correctness bug where the `size == && ModTime.Equal` fast path in
-   `internal/store/engine.go` can silently drop an *equal-length* modification written
-   within filesystem timestamp granularity. Fixing it (likely by trusting the hash as the
-   authoritative signal, or only trusting the mtime fast path when the recorded mtime is
-   sufficiently old) is a correctness improvement and should land before further consumers
-   of the change stream are built on top of it. Include the requested reproduction test.
-2. **`08` — CLI snapshot header dominant-action label.** Small, output-only change in
+1. **`08` — CLI snapshot header dominant-action label.** Small, output-only change in
    `snapshotter.go`. Decides/confirms the parenthetical label precedence for mixed-action
    snapshots (`(modified)` / `(moved)`, and how `CREATE` / `DELETE` / `IGNORED`-only
    snapshots read). Independent of `09` and can be slotted in at any point.
+2. **`10` — README with vhs demo GIF.** Highest-leverage polish; see
+   `issues/10-write-readme-and-vhs-demo.md`.
 
 ## MVP-readiness checklist
 
@@ -59,8 +54,8 @@ Prioritised by leverage/value for an outside reviewer:
       TUI screenshot / vhs demo; a quickstart that just works; a small architecture diagram.
       Keep the docs/ issue workflow mentioned (it is itself a positive signal).
       Tracked as **issue 10** (`issues/10-write-readme-and-vhs-demo.md`).
-- [ ] **Issue 09 fix** — a "trustworthy snapshot tool" with a known silent-data-loss gap
-      undercuts the whole thesis to a reviewer. Land before presenting.
+- [x] **Issue 09 fix** — landed on `feature/09-engine-diff-modtime-short-circuit` as
+      **DD-02** (grace-period fast path + reproduction tests); merge to `main` pending.
 - [ ] **LICENSE** — public repo with no license reads as all-rights-reserved / an oversight.
       MIT is the low-friction default. Add only if publishing (this repo is public).
 - [ ] **CI build + Makefile `fmt`/`vet`/`tidy`** — green `go vet` + `gofmt` check + `go test`
