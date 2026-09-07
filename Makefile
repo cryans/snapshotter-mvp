@@ -1,4 +1,4 @@
-.PHONY: build run test clean fmt fmt-check vet tidy cover cover-report check
+.PHONY: build run test clean fmt fmt-check vet tidy cover cover-report check demo
 
 build:
 	go build -o bin/snapshotter .
@@ -41,6 +41,11 @@ cover:
 # coverage.out produced by `make cover`. CI uploads coverage.html as an artifact.
 cover-report:
 	go tool cover -html=coverage.out -o coverage.html
+
+# Regenerate the README demo GIF from the committed vhs tape (demo.tape).
+# Requires vhs and ffmpeg on $PATH; see README.md "Demo".
+demo: build
+	PATH="$(CURDIR)/bin:$$PATH" vhs demo.tape
 
 # Local analogue of the CI gate.
 check: fmt-check vet test
