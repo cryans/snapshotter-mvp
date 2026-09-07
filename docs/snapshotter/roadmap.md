@@ -3,7 +3,11 @@
 > Build-order and backlog tracking for `snapshotter`. **No code changes live here**; this
 > file only records issue status and pick-up order.
 >
-> Last updated: 2026-09-04T15:50:00Z
+> Settled design questions are recorded in `docs/snapshotter/spec.md` (see **Design
+> Decisions**) rather than here, so the roadmap stays about build order. Latest:
+> DD-01 — a file copy is a CREATE, not a COPY (git-mirroring).
+>
+> Last updated: 2026-09-07T10:37:18Z
 
 ## Backlog status snapshot
 

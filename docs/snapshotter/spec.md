@@ -16,6 +16,51 @@ A local-first, deterministic file snapshotting engine.
 6. **Tech Stack**: Standard library Go for `internal/store`, with the single documented exception of `github.com/sabhiram/go-gitignore` for parsing `.gitignore` rules (see `AGENTS.md`). The interactive history TUI that `snapshotter <filename>` launches lives in the root `main` package and uses the `charmbracelet/bubbletea` TUI framework (with `lipgloss`), a second documented exception confined to that UI code — `internal/store` itself stays pure standard library. The module's `go` directive is 1.24 (see `AGENTS.md`).
 7. **Regular Files Only / Empty Directories**: Only regular files are ever snapshotted. Directories themselves are never tracked, so creating or removing an empty directory produces no events — only files inside it do. Consequently a commit is recorded only when at least one file-level change exists.
 
+## Design Decisions
+
+Design decisions are recorded here (ADR-style) when they are made and confirmed,
+so a future session does not re-litigate a settled question. Each entry states the
+context, the decision, and the rationale/tradeoffs.
+
+### DD-01: A file copy is recorded as a CREATE, not a COPY (2026-09-07)
+
+**Context.** `cp a b` (both files then live/tracked) is reported by the engine as
+a `CREATE` of `b`, with an empty `PreviousID`. The question arose whether `b`
+should instead be labelled a `COPY`, whether `PreviousID` should be populated from
+the source `a`'s lineage, and what git does in the same situation.
+
+**Decision.** A byte-identical new file whose source is still present is recorded
+as a plain `CREATE` — a fresh lineage root with an empty `PreviousID`. Copy is
+**not** promoted to a first-class action type, and the engine does not attempt to
+link `b` to `a` at write time. This matches git: git never records a copy/rename in
+a commit (a commit is just a content-addressed snapshot of the whole tree); copy
+detection exists only as an **opt-in, read-time display heuristic** (`git diff -C` /
+`--find-copies` / `--find-copies-harder`), off by default, and it never persists a
+relationship. snapshotter intentionally mirrors that default.
+
+**Rationale / tradeoffs.**
+- **Intent is not observable from a disk walk.** A byte-identical new file could be
+  a deliberate `cp`, a hardlink copy, `cat a > b`, or an unrelated file that merely
+  hashes the same. Only a filesystem-level signal (which the walk does not read)
+  could distinguish copy intent; content equality is not proof of it.
+- **A copy is a new logical path.** `PreviousID` links the action that produced the
+  *previous version of this logical file* (single-parent lineage: CREATE→MODIFY→
+  DELETE). `b` has no prior version, and auto-linking it to `a` would create a
+  **branching** lineage (a fork); a later modify to `a` or `b` could then not
+  disambiguate which branch is meant. Git avoids storing renames/copies partly for
+  this reason — a file is not a stable identity in the model.
+- **Copy is not MOVE, and the engine already keeps them apart.** `MOVE` fires only
+  when a hash matches a *physically missing* tracked file. Because `a` is still
+  present it is never a move candidate, so `cp` can never be misreported as a
+  MOVE/DELETE. Copying onto an already-deleted-origin *would* surface as a MOVE,
+  which is correct (the original is gone).
+
+**Future option (kept off the critical path).** If copy *reporting* is ever wanted,
+do it like git: a read-time heuristic that annotates a new `CREATE` whose hash equals
+a still-live file's hash as a "possible copy of `<src>`" — presentation only, no
+schema/ledger/reducer change, and no branching lineage. Do not add an `ActionCopy`
+to the engine unless a concrete need for persisting copy identity appears.
+
 ## Interactive File History Viewer (issue 03)
 
 `snapshotter <filename>` opens a small interactive terminal viewer showing that
