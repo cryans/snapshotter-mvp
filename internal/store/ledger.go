@@ -44,7 +44,7 @@ func (l *Ledger) Append(commit *CommitEvent) error {
 
 	// 2. Write mirrored tree
 	ts := commit.Timestamp.Format("2006-01-02T15-04-05.000") // safe characters for filesystem
-	
+
 	for _, change := range commit.Changes {
 		if err := l.writeMirroredTree(change, ts); err != nil {
 			return fmt.Errorf("failed to write mirrored tree for %s: %w", change.Path, err)
@@ -58,7 +58,7 @@ func (l *Ledger) writeMirroredTree(change Change, timestamp string) error {
 	switch change.Action {
 	case ActionCreate, ActionModify:
 		return l.copyToSnapshot(change.Path, change.Path, timestamp, "")
-		
+
 	case ActionDelete:
 		targetDir := filepath.Join(l.snapshotDir, change.Path)
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
@@ -105,7 +105,7 @@ func (l *Ledger) writeMirroredTree(change Change, timestamp string) error {
 
 		// 3. Write actual content
 		return l.copyToSnapshot(change.Path, change.Path, timestamp, "")
-	
+
 	default:
 		return fmt.Errorf("unknown action: %s", change.Action)
 	}
@@ -115,7 +115,7 @@ func (l *Ledger) writeMirroredTree(change Change, timestamp string) error {
 func (l *Ledger) copyToSnapshot(srcPath, dstPath, timestamp, suffix string) error {
 	srcFull := filepath.Join(l.workDir, srcPath)
 	dstDir := filepath.Join(l.snapshotDir, dstPath)
-	
+
 	if err := os.MkdirAll(dstDir, 0755); err != nil {
 		return err
 	}

@@ -59,7 +59,7 @@ func TestProjection_Apply(t *testing.T) {
 	if _, ok := proj.ActiveFiles["readme.md"]; !ok {
 		t.Errorf("Expected readme.md to be present in active files")
 	}
-	
+
 	movedFile := proj.ActiveFiles["readme.md"]
 	if movedFile.Hash != "abc" || movedFile.Size != 100 {
 		t.Errorf("Expected move to carry over state properties, got hash=%s, size=%d", movedFile.Hash, movedFile.Size)

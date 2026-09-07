@@ -33,7 +33,7 @@ func TestLedger_Append(t *testing.T) {
 			{Action: ActionMove, Path: "new.txt", OldPath: "renamed.txt"},
 		},
 	}
-	
+
 	// Create the moved file in work dir so we can read it
 	os.WriteFile(filepath.Join(workDir, "new.txt"), []byte("moved content"), 0644)
 
@@ -48,7 +48,7 @@ func TestLedger_Append(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read events.jsonl: %v", err)
 	}
-	
+
 	var readCommit CommitEvent
 	if err := json.Unmarshal(b, &readCommit); err != nil {
 		t.Fatalf("Failed to parse events.jsonl: %v", err)
@@ -142,7 +142,7 @@ func TestLedger_Append_Multiple(t *testing.T) {
 	snapDir := t.TempDir()
 
 	ledger := NewLedger(workDir, snapDir)
-	
+
 	for i := 0; i < 3; i++ {
 		now := time.Now()
 		c := &CommitEvent{
@@ -166,7 +166,7 @@ func TestLedger_Append_Multiple(t *testing.T) {
 	for scanner.Scan() {
 		count++
 	}
-	
+
 	if count != 3 {
 		t.Errorf("Expected 3 events in jsonl, got %d", count)
 	}

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    name: vet + gofmt + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # gofmt must not need to re-flow any tracked source (issue 11).
+      - name: gofmt check
+        run: make fmt-check
+
+      - name: go vet
+        run: make vet
+
+      - name: go test
+        run: make test
+
+      # Emit a coverage profile on every push/PR as the CI gate.
+      - name: Generate coverage profile
+        run: make cover
+
+      # Visual coverage output is produced only on default-branch pushes to
+      # avoid noisy per-PR uploads; it is surfaced as build artifacts you can
+      # download and open in a browser (issue 11).
+      - name: Build HTML coverage report
+        if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        run: make cover-report
+
+      - name: Upload HTML coverage report
+        if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.html
+
+      - name: Upload coverage profile
+        if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage.out
+          path: coverage.out

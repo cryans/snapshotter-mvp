@@ -47,14 +47,14 @@ func (p *Projection) Apply(commit *CommitEvent) {
 
 		case ActionMove:
 			oldState, ok := p.ActiveFiles[change.OldPath]
-			
+
 			// Remove from old location and mark as deleted (tombstone)
 			delete(p.ActiveFiles, change.OldPath)
 			p.Tombstones[change.OldPath] = Tombstone{
 				Path:      change.OldPath,
 				DeletedAt: commit.Timestamp,
 			}
-			
+
 			// If the event doesn't contain full file details, we carry them over
 			// from the existing state prior to the move.
 			hash := change.Hash
