@@ -2,8 +2,10 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -180,6 +182,51 @@ func TestLoadProjection(t *testing.T) {
 	}
 	if proj2.ActiveFiles["file1.txt"].Hash != "bbb" {
 		t.Errorf("Expected file1.txt hash to be 'bbb'")
+	}
+}
+
+func TestLoadProjection_HugeSingleCommit(t *testing.T) {
+	// A single snapshot commit stores ALL of its changes on one JSONL line. A
+	// full-tree first-run snapshot of a real project can therefore serialize to
+	// well over bufio.Scanner's 64 KiB default, which used to make every
+	// subsequent replay fail with "bufio.Scanner: token too long".
+	dir := t.TempDir()
+	eventsPath := filepath.Join(dir, "events.jsonl")
+
+	f, err := os.Create(eventsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const fileCount = 5000
+	dirPrefix := strings.Repeat("deep/", 30)
+	changes := make([]Change, 0, fileCount)
+	for i := 0; i < fileCount; i++ {
+		p := fmt.Sprintf("pkg/%sfile-%05d.txt", dirPrefix, i)
+		changes = append(changes, Change{
+			Action: ActionCreate, Path: p,
+			Hash: strings.Repeat("ab", 32), // 64-char sha256 hex
+			Size: 100, ModTime: time.Now(),
+			ID: "01H9QY8V8GX6VXJY0N3R2M7K4Q",
+		})
+	}
+	commit := &CommitEvent{ID: "HUGE-1", Timestamp: time.Now(), Changes: changes}
+	if err := json.NewEncoder(f).Encode(commit); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if info, _ := os.Stat(eventsPath); info.Size() <= 64*1024 {
+		t.Fatalf("test fixture line is only %d bytes; must exceed 64 KiB to exercise the bug", info.Size())
+	}
+
+	proj, err := LoadProjection(eventsPath)
+	if err != nil {
+		t.Fatalf("LoadProjection rejected an oversized single commit line: %v", err)
+	}
+	if len(proj.ActiveFiles) != fileCount {
+		t.Errorf("expected %d active files, got %d", fileCount, len(proj.ActiveFiles))
 	}
 }
 
