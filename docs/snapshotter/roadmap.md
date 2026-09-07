@@ -7,7 +7,7 @@
 > Decisions**) rather than here, so the roadmap stays about build order. Latest:
 > DD-01 — a file copy is a CREATE, not a COPY (git-mirroring).
 >
-> Last updated: 2026-09-07T11:49:00Z
+> Last updated: 2026-09-07T12:01:00Z
 
 ## Backlog status snapshot
 
@@ -23,16 +23,29 @@
 | 08 | CLI snapshot summary surfaces the dominant action kind | `completed` | Re-scoped to per-line worded action labels; landed `5922163` |
 | 09 | Engine diff can miss equal-length modifications within timestamp granularity | `completed` | DD-02 grace-period fast path; tests added |
 | 10 | Write README.md with vhs demo GIF | `proposed` | Docs/demo; see `issues/10-…` |
+| 11 | Project licensing, CI build gate, and gofmt sweep | `proposed` | LICENSE + Makefile `fmt`/`vet`/`tidy` + `gofmt` sweep |
+| 12 | Decide whether enhanced logging is worth adding | `proposed` | Decision; polish, not MVP-blocking |
 
 Foundation + lineage + restores + TUI are all landed: **01–07 are done**, **09** is
 implemented too (DD-02), and **08** shipped as per-line worded action labels at
-`5922163`. The only remaining backlog item is **10** (README + demo GIF). Nothing is
-hard-blocked; `10` is a docs/demo task.
+`5922163`. The remaining backlog — triaged on `backlog-planning` — is **11** (LICENSE +
+CI + gofmt sweep), **12** (enhanced-logging decision), and the README write (**10**).
+Nothing is hard-blocked; pick-up priority is 11 → 12 → 10.
 
 ## Pick-up order for next session
 
-1. **`10` — README with vhs demo GIF.** Only remaining backlog item. Highest-leverage
-   polish; see `issues/10-write-readme-and-vhs-demo.md`.
+Triaged on `backlog-planning`. Remaining open work, in suggested build order:
+
+1. **`11` — Project licensing, CI build gate, and gofmt sweep.** Public-repo
+   publishability / "maintained" signal: MIT `LICENSE`, Makefile `fmt`/`vet`/`tidy` + a
+   CI `vet`/`gofmt`/`test` gate, and a `gofmt` sweep of `internal/store/*.go`.
+   See `issues/11-license-ci-and-gofmt-sweep.md`.
+2. **`12` — Decide whether enhanced logging is worth adding.** Decision item; polish,
+   not MVP-blocking. See `issues/12-enhanced-logging-decision.md`.
+3. **`10` — README with vhs demo GIF.** Headline documentation task, done last. See
+   `issues/10-write-readme-and-vhs-demo.md`.
+
+Nothing is hard-blocked. Pick-up priority is **11 → 12 → 10**.
 
 ## MVP-readiness checklist
 
@@ -52,17 +65,12 @@ Prioritised by leverage/value for an outside reviewer:
       Tracked as **issue 10** (`issues/10-write-readme-and-vhs-demo.md`).
 - [x] **Issue 09 fix** — landed on `feature/09-engine-diff-modtime-short-circuit` as
       **DD-02** (grace-period fast path + reproduction tests); merge to `main` pending.
-- [ ] **LICENSE** — public repo with no license reads as all-rights-reserved / an oversight.
-      MIT is the low-friction default. Add only if publishing (this repo is public).
-- [ ] **CI build + Makefile `fmt`/`vet`/`tidy`** — green `go vet` + `gofmt` check + `go test`
-      signals "maintained". Git hooks were considered but deferred in favour of CI (hooks
-      don't ship through version control and duplicate a CI gate).
 - [x] **Issue 08 fix** — landed as per-line worded action labels (`5922163`); re-scoped
       from the header-label idea to the delivered output change.
-- [ ] **`gofmt` sweep of `internal/store/*.go`** — trailing-whitespace / alignment nits
-      (`id.go`, `state.go`, `types.go`, `ledger.go` and their tests, `engine_test.go`).
-- [ ] Decide whether **enhanced logging** is worth it for trust (a tool whose job is "you can
-      rely on what I recorded"). Polish, not MVP-blocking.
+- **LICENSE / CI + Makefile `fmt`/`vet`/`tidy` / `gofmt` sweep** — folded into
+      **issue 11** (`issues/11-license-ci-and-gofmt-sweep.md`).
+- **Enhanced logging decision** — tracked as **issue 12**
+      (`issues/12-enhanced-logging-decision.md`); polish, not MVP-blocking.
 
 ## Recorded as **out of MVP scope** (revisit only with concrete evidence)
 
