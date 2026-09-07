@@ -56,18 +56,51 @@ func main() {
 
 	fmt.Printf("Snapshot created: %s\n", event.ID)
 	for _, change := range event.Changes {
-		switch change.Action {
-		case store.ActionCreate:
-			fmt.Printf("  [+] %s\n", change.Path)
-		case store.ActionModify:
-			fmt.Printf("  [~] %s\n", change.Path)
-		case store.ActionDelete:
-			fmt.Printf("  [-] %s\n", change.Path)
-		case store.ActionIgnored:
-			fmt.Printf("  [i] %s\n", change.Path)
-		case store.ActionMove:
-			fmt.Printf("  [>] %s -> %s\n", change.OldPath, change.Path)
-		}
+		fmt.Printf("  %s %s\n", changeGlyph(change.Action), describeChange(change))
+	}
+}
+
+// changeGlyph returns the compact per-line marker for an action kind.
+func changeGlyph(action store.ActionType) string {
+	switch action {
+	case store.ActionCreate:
+		return "[+]"
+	case store.ActionModify:
+		return "[~]"
+	case store.ActionDelete:
+		return "[-]"
+	case store.ActionIgnored:
+		return "[i]"
+	case store.ActionMove:
+		return "[>]"
+	default:
+		return "[?]"
+	}
+}
+
+// describeChange renders a single change as a "(action) path" line.
+func describeChange(change store.Change) string {
+	if change.Action == store.ActionMove {
+		return fmt.Sprintf("(moved) %s -> %s", change.OldPath, change.Path)
+	}
+	return fmt.Sprintf("(%s) %s", labelFor(change.Action), change.Path)
+}
+
+// labelFor maps an action kind to its lowercase worded label.
+func labelFor(action store.ActionType) string {
+	switch action {
+	case store.ActionCreate:
+		return "created"
+	case store.ActionModify:
+		return "modified"
+	case store.ActionDelete:
+		return "deleted"
+	case store.ActionIgnored:
+		return "ignored"
+	case store.ActionMove:
+		return "moved"
+	default:
+		return string(action)
 	}
 }
 
